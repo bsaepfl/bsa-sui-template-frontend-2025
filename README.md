@@ -7,7 +7,7 @@ Client dApp using the following tools:
 - [Next.js](https://nextjs.org/) (v15.5.3) for the React framework with SSR support
 - [TypeScript](https://www.typescriptlang.org/) (v5.9.2) for type checking
 - [Tailwind CSS](https://tailwindcss.com/) (v4.1.13) for styling
-- [Radix UI](https://www.radix-ui.com/) for pre-built accessible UI components
+- [ShadCN UI](https://ui.shadcn.com/) for pre-built accessible UI components
 - [ESLint](https://eslint.org/) (v9.17.0) for linting
 - [`@mysten/dapp-kit`](https://sdk.mystenlabs.com/dapp-kit) (v0.18.0) for connecting to wallets and loading data
 - [`@mysten/sui`](https://www.npmjs.com/package/@mysten/sui) (v1.38.0) for Sui blockchain interactions
@@ -27,8 +27,7 @@ Client dApp using the following tools:
 - **@tanstack/react-query**: v5.87.1 - Data fetching and state management
 
 ### UI Components
-- **@radix-ui/react-navigation-menu**: v1.2.14 - Accessible navigation components
-- **@radix-ui/react-slot**: v1.2.3 - Composition utilities
+- **@shadcn**:Accessible navigation components
 - **Tailwind CSS**: v4.1.13 - Utility-first CSS framework
 - **tailwindcss-animate**: v1.0.7 - Animation utilities
 - **lucide-react**: v0.544.0 - Icon library
