@@ -92,6 +92,16 @@ to save that package ID to the `src/constants.ts` file as `PACKAGE_ID`:
 export const TESTNET_COUNTER_PACKAGE_ID = "<YOUR_PACKAGE_ID>";
 ```
 
+If you are part of the workhsop and wants to increase the counter replace, the following in your constant.ts 
+```ts
+export const TESTNET_COUNTER_PACKAGE_ID = "0xcea82fb908b9d9566b1c7977491e76901ed167978a1ecd6053a994881c0ea9b5";
+```
+
+Then on the front end connect your wallet and find the object id of the counter: 
+0x333231084e917bd2b70bdba0f9c9507360c1014c707026ead9d5fcdab63ae986
+
+
+
 Now that we have published the move code, and update the package ID, we can
 start the app.
 
