@@ -14,11 +14,15 @@ module counter::counter {
     value: u64
   }
 
+  public struct OwnerCap has key {
+    id: UID,
+  }
+
   /// Create and share a Counter object.
   public fun create(ctx: &mut TxContext) {
     transfer::share_object(Counter {
       id: object::new(ctx),
-      owner: ctx.sender(),
+      owner: tx_context::sender(ctx),
       value: 0
     })
   }
@@ -30,7 +34,7 @@ module counter::counter {
 
   /// Set value (only runnable by the Counter owner)
   public fun set_value(counter: &mut Counter, value: u64, ctx: &TxContext) {
-    assert!(counter.owner == ctx.sender(), 0);
+    assert!(counter.owner == tx_context::sender(ctx), 0);
     counter.value = value;
   }
 }
