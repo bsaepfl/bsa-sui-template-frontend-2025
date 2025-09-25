@@ -469,6 +469,735 @@ When you deploy a smart contract to the Sui blockchain, it gets assigned a uniqu
 
 This long hexadecimal string uniquely identifies your deployed smart contract among millions of others on the network.
 
+## Creating Your Own Smart Contract
+
+Ready to move beyond the counter example? Here's how to create your own custom smart contract and integrate it with your frontend.
+
+### Step 1: Understanding the Move Code Structure
+
+First, let's look at the current counter smart contract to understand the structure:
+
+**File: `move/counter/sources/counter.move`**
+
+```move
+module counter::counter {
+    use sui::object::{Self, UID};
+    use sui::transfer;
+    use sui::tx_context::{Self, TxContext};
+
+    /// A counter object
+    public struct Counter has key {
+        id: UID,
+        value: u64,
+    }
+
+    /// Create a new counter
+    public fun create(ctx: &mut TxContext) {
+        let counter = Counter {
+            id: object::new(ctx),
+            value: 0,
+        };
+        transfer::share_object(counter);
+    }
+
+    /// Increment the counter
+    public fun increment(counter: &mut Counter) {
+        counter.value = counter.value + 1;
+    }
+}
+```
+
+**Key Components:**
+- **Module Declaration**: `module counter::counter` defines the module name
+- **Struct Definition**: `Counter` is the main data structure
+- **Functions**: `create()` and `increment()` are the public functions you can call
+
+### Step 2: Create Your Custom Smart Contract
+
+Let's create a simple **Task Manager** smart contract as an example:
+
+**File: `move/task_manager/sources/task_manager.move`**
+
+```move
+module task_manager::task_manager {
+    use sui::object::{Self, UID};
+    use sui::transfer;
+    use sui::tx_context::{Self, TxContext};
+    use std::string::{Self, String};
+    use std::vector;
+
+    /// A task list object
+    public struct TaskList has key {
+        id: UID,
+        tasks: vector<Task>,
+        owner: address,
+    }
+
+    /// Individual task structure
+    public struct Task has store, copy, drop {
+        id: u64,
+        title: String,
+        completed: bool,
+    }
+
+    /// Create a new task list
+    public fun create_task_list(ctx: &mut TxContext) {
+        let task_list = TaskList {
+            id: object::new(ctx),
+            tasks: vector::empty<Task>(),
+            owner: tx_context::sender(ctx),
+        };
+        transfer::transfer(task_list, tx_context::sender(ctx));
+    }
+
+    /// Add a new task
+    public fun add_task(
+        task_list: &mut TaskList, 
+        title: String, 
+        ctx: &mut TxContext
+    ) {
+        assert!(task_list.owner == tx_context::sender(ctx), 0);
+        
+        let task = Task {
+            id: vector::length(&task_list.tasks),
+            title,
+            completed: false,
+        };
+        vector::push_back(&mut task_list.tasks, task);
+    }
+
+    /// Mark task as completed
+    public fun complete_task(
+        task_list: &mut TaskList, 
+        task_id: u64, 
+        ctx: &mut TxContext
+    ) {
+        assert!(task_list.owner == tx_context::sender(ctx), 0);
+        
+        let task = vector::borrow_mut(&mut task_list.tasks, task_id);
+        task.completed = true;
+    }
+
+    /// Get task count
+    public fun get_task_count(task_list: &TaskList): u64 {
+        vector::length(&task_list.tasks)
+    }
+}
+```
+
+**What's Different:**
+- **Multiple Functions**: `create_task_list()`, `add_task()`, `complete_task()`
+- **Complex Data**: Uses vectors and custom structs
+- **Access Control**: Only the owner can modify tasks
+- **String Handling**: Tasks have titles
+
+### Step 3: Update Your Move.toml Configuration
+
+**File: `move/task_manager/Move.toml`**
+
+```toml
+[package]
+name = "task_manager"
+version = "1.0.0"
+edition = "2024.beta"
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/testnet" }
+
+[addresses]
+task_manager = "0x0"
+```
+
+**Key Changes:**
+- **Package Name**: Changed from "counter" to "task_manager"
+- **Module Address**: Updated to match your module name
+
+### Step 4: Deploy Your Custom Smart Contract
+
+**Navigate to Your Move Directory:**
+```bash
+cd move/task_manager
+```
+
+**Deploy to Testnet:**
+```bash
+sui client publish --gas-budget 100000000 .
+```
+
+**Save Your Package ID:**
+After deployment, copy the `packageId` from the output and update your constants:
+
+```typescript
+// In constants.ts
+export const TESTNET_TASK_MANAGER_PACKAGE_ID = "0xYOUR_NEW_PACKAGE_ID";
+```
+
+### Step 5: Update Frontend Configuration
+
+**File: `app/constants.ts`**
+
+```typescript
+// Keep the counter package ID
+export const TESTNET_COUNTER_PACKAGE_ID = "0xcea82fb908b9d9566b1c7977491e76901ed167978a1ecd6053a994881c0ea9b5";
+
+// Add your new package ID
+export const TESTNET_TASK_MANAGER_PACKAGE_ID = "0xYOUR_NEW_PACKAGE_ID";
+```
+
+**File: `app/networkConfig.ts`**
+
+```typescript
+import { getFullnodeUrl } from "@mysten/sui/client";
+import { createNetworkConfig } from "@mysten/dapp-kit";
+import { 
+  TESTNET_COUNTER_PACKAGE_ID, 
+  TESTNET_TASK_MANAGER_PACKAGE_ID 
+} from "./constants";
+
+const { networkConfig, useNetworkVariable, useNetworkVariables } =
+  createNetworkConfig({
+    testnet: {
+      url: getFullnodeUrl("testnet"),
+      variables: {
+        counterPackageId: TESTNET_COUNTER_PACKAGE_ID,
+        taskManagerPackageId: TESTNET_TASK_MANAGER_PACKAGE_ID, // Add this line
+      },
+    },
+    mainnet: {
+      url: getFullnodeUrl("mainnet"),
+      variables: {
+        counterPackageId: "0xTODO",
+        taskManagerPackageId: "0xTODO", // Add this line
+      },
+    },
+  });
+
+export { networkConfig, useNetworkVariable, useNetworkVariables };
+```
+
+### Step 6: Create Frontend Components
+
+**File: `app/TaskManager.tsx`**
+
+```typescript
+import { useState } from "react";
+import { Transaction } from "@mysten/sui/transactions";
+import { useSignAndExecuteTransaction, useSuiClient, useSuiClientQuery } from "@mysten/dapp-kit";
+import { useNetworkVariable } from "./networkConfig";
+import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
+
+export function TaskManager({ taskListId }: { taskListId?: string }) {
+  const taskManagerPackageId = useNetworkVariable("taskManagerPackageId");
+  const suiClient = useSuiClient();
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch task list data
+  const { data: taskListData, refetch } = useSuiClientQuery(
+    "getObject",
+    {
+      id: taskListId!,
+      options: { showContent: true },
+    },
+    { enabled: !!taskListId }
+  );
+
+  // Create new task list
+  const createTaskList = () => {
+    setIsLoading(true);
+    const tx = new Transaction();
+
+    tx.moveCall({
+      arguments: [],
+      target: `${taskManagerPackageId}::task_manager::create_task_list`,
+    });
+
+    signAndExecute(
+      { transaction: tx },
+      {
+        onSuccess: async ({ digest }) => {
+          const { effects } = await suiClient.waitForTransaction({
+            digest,
+            options: { showEffects: true },
+          });
+          
+          const createdObjectId = effects?.created?.[0]?.reference?.objectId;
+          console.log("Task list created:", createdObjectId);
+          setIsLoading(false);
+        },
+        onError: () => setIsLoading(false),
+      }
+    );
+  };
+
+  // Add new task
+  const addTask = () => {
+    if (!newTaskTitle.trim() || !taskListId) return;
+    
+    setIsLoading(true);
+    const tx = new Transaction();
+
+    tx.moveCall({
+      arguments: [
+        tx.object(taskListId),
+        tx.pure.string(newTaskTitle),
+      ],
+      target: `${taskManagerPackageId}::task_manager::add_task`,
+    });
+
+    signAndExecute(
+      { transaction: tx },
+      {
+        onSuccess: async ({ digest }) => {
+          await suiClient.waitForTransaction({ digest });
+          await refetch();
+          setNewTaskTitle("");
+          setIsLoading(false);
+        },
+        onError: () => setIsLoading(false),
+      }
+    );
+  };
+
+  // Complete task
+  const completeTask = (taskId: number) => {
+    if (!taskListId) return;
+    
+    setIsLoading(true);
+    const tx = new Transaction();
+
+    tx.moveCall({
+      arguments: [
+        tx.object(taskListId),
+        tx.pure.u64(taskId),
+      ],
+      target: `${taskManagerPackageId}::task_manager::complete_task`,
+    });
+
+    signAndExecute(
+      { transaction: tx },
+      {
+        onSuccess: async ({ digest }) => {
+          await suiClient.waitForTransaction({ digest });
+          await refetch();
+          setIsLoading(false);
+        },
+        onError: () => setIsLoading(false),
+      }
+    );
+  };
+
+  // Parse task list data
+  const getTaskListFields = (data: any) => {
+    if (data?.content?.dataType !== "moveObject") return null;
+    return data.content.fields as {
+      tasks: Array<{ id: string; title: string; completed: boolean }>;
+      owner: string;
+    };
+  };
+
+  const taskListFields = taskListData ? getTaskListFields(taskListData) : null;
+
+  if (!taskListId) {
+    return (
+      <div className="p-4">
+        <h2 className="text-xl font-bold mb-4">Task Manager</h2>
+        <Button onClick={createTaskList} disabled={isLoading}>
+          {isLoading ? "Creating..." : "Create Task List"}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4">
+      <h2 className="text-xl font-bold mb-4">My Tasks</h2>
+      
+      {/* Add new task */}
+      <div className="flex gap-2 mb-4">
+        <Input
+          value={newTaskTitle}
+          onChange={(e) => setNewTaskTitle(e.target.value)}
+          placeholder="Enter task title..."
+          onKeyPress={(e) => e.key === "Enter" && addTask()}
+        />
+        <Button onClick={addTask} disabled={isLoading || !newTaskTitle.trim()}>
+          Add Task
+        </Button>
+      </div>
+
+      {/* Task list */}
+      <div className="space-y-2">
+        {taskListFields?.tasks.map((task, index) => (
+          <div
+            key={index}
+            className={`flex items-center justify-between p-3 border rounded ${
+              task.completed ? "bg-green-50 text-green-800" : "bg-white"
+            }`}
+          >
+            <span className={task.completed ? "line-through" : ""}>
+              {task.title}
+            </span>
+            {!task.completed && (
+              <Button
+                size="sm"
+                onClick={() => completeTask(parseInt(task.id))}
+                disabled={isLoading}
+              >
+                Complete
+              </Button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {taskListFields?.tasks.length === 0 && (
+        <p className="text-gray-500 text-center py-8">
+          No tasks yet. Add your first task above!
+        </p>
+      )}
+    </div>
+  );
+}
+```
+
+### General Steps for Any Custom Smart Contract
+
+#### **1. Plan Your Smart Contract**
+- **Define your data structures** (what objects will you store?)
+- **List the functions** you need (create, update, delete, query)
+- **Consider access control** (who can call which functions?)
+
+#### **2. Write the Move Code**
+```move
+module your_module::your_contract {
+    // Import necessary modules
+    use sui::object::{Self, UID};
+    use sui::transfer;
+    use sui::tx_context::{Self, TxContext};
+
+    // Define your data structures
+    public struct YourObject has key {
+        id: UID,
+        // your fields here
+    }
+
+    // Create functions
+    public fun create_object(ctx: &mut TxContext) {
+        // implementation
+    }
+
+    // Other functions
+    public fun update_object(obj: &mut YourObject, /* params */) {
+        // implementation
+    }
+}
+```
+
+#### **3. Deploy and Configure**
+```bash
+# Deploy
+sui client publish --gas-budget 100000000 your_module
+
+# Update constants.ts
+export const TESTNET_YOUR_PACKAGE_ID = "0xYOUR_PACKAGE_ID";
+
+# Update networkConfig.ts
+variables: {
+  yourPackageId: TESTNET_YOUR_PACKAGE_ID,
+}
+```
+
+#### **4. Create Frontend Components**
+```typescript
+// Get package ID
+const yourPackageId = useNetworkVariable("yourPackageId");
+
+// Create transactions
+const tx = new Transaction();
+tx.moveCall({
+  arguments: [/* your arguments */],
+  target: `${yourPackageId}::your_contract::your_function`,
+});
+
+// Execute transactions
+signAndExecute({ transaction: tx }, {
+  onSuccess: async ({ digest }) => {
+    // Handle success
+  }
+});
+```
+
+### Common Smart Contract Patterns
+
+Here are some popular smart contract patterns you can implement:
+
+#### **1. NFT Collection**
+```move
+module nft_collection::nft {
+    public struct NFT has key, store {
+        id: UID,
+        name: String,
+        description: String,
+        image_url: String,
+        creator: address,
+    }
+
+    public fun mint_nft(
+        name: String,
+        description: String, 
+        image_url: String,
+        ctx: &mut TxContext
+    ) {
+        let nft = NFT {
+            id: object::new(ctx),
+            name,
+            description,
+            image_url,
+            creator: tx_context::sender(ctx),
+        };
+        transfer::public_transfer(nft, tx_context::sender(ctx));
+    }
+}
+```
+
+#### **2. Voting System**
+```move
+module voting::poll {
+    public struct Poll has key {
+        id: UID,
+        question: String,
+        options: vector<String>,
+        votes: vector<u64>,
+        voters: vector<address>,
+        creator: address,
+        end_time: u64,
+    }
+
+    public fun create_poll(
+        question: String,
+        options: vector<String>,
+        duration_ms: u64,
+        ctx: &mut TxContext
+    ) {
+        let poll = Poll {
+            id: object::new(ctx),
+            question,
+            options,
+            votes: vector::empty<u64>(),
+            voters: vector::empty<address>(),
+            creator: tx_context::sender(ctx),
+            end_time: tx_context::epoch_timestamp_ms(ctx) + duration_ms,
+        };
+        transfer::share_object(poll);
+    }
+
+    public fun vote(poll: &mut Poll, option_index: u64, ctx: &mut TxContext) {
+        let voter = tx_context::sender(ctx);
+        assert!(!vector::contains(&poll.voters, &voter), 0); // No double voting
+        assert!(tx_context::epoch_timestamp_ms(ctx) < poll.end_time, 1); // Poll not ended
+        
+        vector::push_back(&mut poll.voters, voter);
+        let current_votes = vector::borrow_mut(&mut poll.votes, option_index);
+        *current_votes = *current_votes + 1;
+    }
+}
+```
+
+#### **3. Marketplace**
+```move
+module marketplace::shop {
+    public struct Item has key, store {
+        id: UID,
+        name: String,
+        price: u64,
+        seller: address,
+        for_sale: bool,
+    }
+
+    public fun list_item(
+        name: String,
+        price: u64,
+        ctx: &mut TxContext
+    ) {
+        let item = Item {
+            id: object::new(ctx),
+            name,
+            price,
+            seller: tx_context::sender(ctx),
+            for_sale: true,
+        };
+        transfer::share_object(item);
+    }
+
+    public fun buy_item(
+        item: &mut Item,
+        payment: Coin<SUI>,
+        ctx: &mut TxContext
+    ) {
+        assert!(item.for_sale, 0);
+        assert!(coin::value(&payment) >= item.price, 1);
+        
+        transfer::public_transfer(payment, item.seller);
+        item.for_sale = false;
+        
+        // Transfer ownership logic here
+    }
+}
+```
+
+### Deployment Best Practices
+
+#### **Testing Before Deployment**
+```bash
+# 1. Test your Move code locally
+sui move test
+
+# 2. Build without publishing to check for errors
+sui move build
+
+# 3. Deploy to devnet first for testing
+sui client switch --env devnet
+sui client publish --gas-budget 100000000 .
+
+# 4. Test thoroughly on devnet
+# 5. Deploy to testnet for public testing
+sui client switch --env testnet
+sui client publish --gas-budget 100000000 .
+
+# 6. Finally deploy to mainnet when ready
+sui client switch --env mainnet
+sui client publish --gas-budget 100000000 .
+```
+
+#### **Gas Budget Guidelines**
+- **Simple contracts**: 10,000,000 (10M)
+- **Medium complexity**: 50,000,000 (50M)
+- **Complex contracts**: 100,000,000 (100M)
+- **Very large contracts**: 200,000,000 (200M)
+
+#### **Version Management**
+```toml
+# In Move.toml, always increment version
+[package]
+name = "your_contract"
+version = "1.1.0"  # Increment this for updates
+edition = "2024.beta"
+```
+
+### Troubleshooting Deployment Issues
+
+#### **Common Errors and Solutions**
+
+**Error: "Insufficient gas"**
+```bash
+# Solution: Increase gas budget
+sui client publish --gas-budget 200000000 .
+```
+
+**Error: "Module already exists"**
+```bash
+# Solution: You can't redeploy the same module. Create a new version or use upgrade
+# For new version, change the module name:
+module your_contract_v2::contract {
+    // your code
+}
+```
+
+**Error: "Invalid address"**
+```toml
+# Solution: Make sure addresses in Move.toml are correct
+[addresses]
+your_contract = "0x0"  # This should always be 0x0 for new deployments
+```
+
+**Error: "Compilation failed"**
+```bash
+# Solution: Check your Move syntax
+sui move build  # This will show detailed error messages
+```
+
+#### **Debugging Tips**
+1. **Use `sui move test`** to run unit tests before deployment
+2. **Check dependencies** in Move.toml match your Sui version
+3. **Verify imports** - make sure all `use` statements are correct
+4. **Test functions individually** before deploying the full contract
+5. **Use `assert!` statements** for input validation in your Move code
+
+### Frontend Integration Patterns
+
+#### **Pattern 1: Simple Function Calls**
+```typescript
+// For functions that don't return data
+const callFunction = () => {
+  const tx = new Transaction();
+  tx.moveCall({
+    arguments: [tx.pure.string("hello")],
+    target: `${packageId}::module::function_name`,
+  });
+  
+  signAndExecute({ transaction: tx });
+};
+```
+
+#### **Pattern 2: Object Queries**
+```typescript
+// For reading object data
+const { data } = useSuiClientQuery(
+  "getObject",
+  {
+    id: objectId,
+    options: { showContent: true },
+  },
+  { enabled: !!objectId }
+);
+
+// Parse the data
+const objectFields = data?.content?.dataType === "moveObject" 
+  ? data.content.fields 
+  : null;
+```
+
+#### **Pattern 3: Event Listening**
+```typescript
+// For listening to contract events
+const { data: events } = useSuiClientQuery(
+  "queryEvents",
+  {
+    query: {
+      MoveModule: {
+        package: packageId,
+        module: "your_module",
+      },
+    },
+  }
+);
+```
+
+#### **Pattern 4: Multi-Step Transactions**
+```typescript
+// For complex operations requiring multiple calls
+const complexOperation = () => {
+  const tx = new Transaction();
+  
+  // Step 1: Create object
+  const [obj] = tx.moveCall({
+    arguments: [],
+    target: `${packageId}::module::create_object`,
+  });
+  
+  // Step 2: Use the created object
+  tx.moveCall({
+    arguments: [obj, tx.pure.string("data")],
+    target: `${packageId}::module::update_object`,
+  });
+  
+  signAndExecute({ transaction: tx });
+};
+```
+
 ### The Three Networks
 
 Your constants.ts file defines Package IDs for three different Sui networks:
