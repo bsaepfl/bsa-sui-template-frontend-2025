@@ -7,6 +7,22 @@ Client dApp using the following tools:
 
 This guide will help you set up and run this Sui dApp template from scratch, even if you're completely new to development.
 
+### GitHub Codespaces Setup
+
+This project includes a `.devcontainer` configuration for GitHub Codespaces that automatically sets up the correct Node.js and pnpm versions.
+
+**To use GitHub Codespaces:**
+
+1. **Open in Codespace**: Click the green "Code" button on GitHub → "Codespaces" → "Create codespace on main"
+2. **Wait for Setup**: The devcontainer will automatically:
+   - Install Node.js 18.12+
+   - Install pnpm latest version
+   - Install all project dependencies
+   - Set up VS Code extensions for optimal development
+3. **Start Development**: Once setup is complete, run `pnpm dev` to start the development server
+
+**Manual Setup (if not using Codespaces):**
+
 ### Prerequisites
 
 Before you begin, you'll need to install the following software on your computer:
