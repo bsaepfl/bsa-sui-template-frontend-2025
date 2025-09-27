@@ -37,18 +37,12 @@ Node.js is a JavaScript runtime that allows you to run JavaScript applications o
 **Verify Installation:**
 ```bash
 node --version
-npm --version
 ```
 
 #### 2. pnpm (Package Manager)
 pnpm is a fast, disk space efficient package manager that we use for this project.
 
-**Install pnpm globally:**
-```bash
-npm install -g pnpm
-```
-
-**Alternative installation methods:**
+**Installation methods:**
 - **Windows**: Download from [https://pnpm.io/installation](https://pnpm.io/installation)
 - **macOS**: `brew install pnpm` (if you have Homebrew)
 - **Linux**: `curl -fsSL https://get.pnpm.io/install.sh | sh -`
@@ -148,10 +142,7 @@ pnpm start
 If port 3000 is busy, the development server will automatically use the next available port (3001, 3002, etc.)
 
 #### Permission errors on macOS/Linux
-You might need to use `sudo` for global installations:
-```bash
-sudo npm install -g pnpm
-```
+You might need to use `sudo` for global installations. Refer to the pnpm installation guide above for alternative installation methods.
 
 #### Windows PowerShell execution policy
 If you get execution policy errors on Windows:
@@ -360,7 +351,7 @@ This is where the magic happens - connecting your React app to your deployed sma
 
 #### **Understanding the Constants File**
 
-Open <mcfile name="constants.ts" path="/home/Loris/BSA/bsa-2025-frontend-template/app/constants.ts"></mcfile> in your code editor. You'll see:
+Open <mcfile name="constants.ts" path="app/constants.ts"></mcfile> in your code editor. You'll see:
 
 ```typescript
 export const DEVNET_COUNTER_PACKAGE_ID = "0xTODO";
