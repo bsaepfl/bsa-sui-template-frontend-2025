@@ -1,32 +1,35 @@
-import { Transaction } from "@mysten/sui/transactions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useSignAndExecuteTransaction, useSuiClient } from "@mysten/dapp-kit";
-import { useNetworkVariable } from "./networkConfig";
 import ClipLoader from "react-spinners/ClipLoader";
+import { useMemo } from "react";
+import { createCounterService } from "./services";
+import { useNetworkVariable } from "./networkConfig";
 
 export function CreateCounter({
   onCreated,
 }: {
   onCreated: (id: string) => void;
 }) {
-  const counterPackageId = useNetworkVariable("counterPackageId");
-  const suiClient = useSuiClient();
   const {
     mutate: signAndExecute,
     isSuccess,
     isPending,
   } = useSignAndExecuteTransaction();
 
+  // Create counter service directly
+  const suiClient = useSuiClient();
+  const counterPackageId = useNetworkVariable("counterPackageId");
+  const counterService = useMemo(
+    () => createCounterService(suiClient, counterPackageId),
+    [suiClient, counterPackageId]
+  );
 
   function create() {
     console.log('creating tx')
-    const tx = new Transaction();
-
-    tx.moveCall({
-      arguments: [],
-      target: `${counterPackageId}::counter::create`,
-    });
+    
+    // Use service to create transaction
+    const tx = counterService.createCounterTransaction();
 
     signAndExecute(
       {
@@ -34,14 +37,12 @@ export function CreateCounter({
       },
       {
         onSuccess: async ({ digest }) => {
-          const { effects } = await suiClient.waitForTransaction({
-            digest: digest,
-            options: {
-              showEffects: true,
-            },
-          });
-
-          onCreated(effects?.created?.[0]?.reference?.objectId!);
+          // Use service to wait for transaction and get created object ID
+          const createdObjectId = await counterService.waitForTransactionAndGetCreatedObject(digest);
+          
+          if (createdObjectId) {
+            onCreated(createdObjectId);
+          }
         },
       },
     );

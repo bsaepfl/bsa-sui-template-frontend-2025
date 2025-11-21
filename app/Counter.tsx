@@ -1,21 +1,24 @@
 import {
   useCurrentAccount,
   useSignAndExecuteTransaction,
-  useSuiClient,
   useSuiClientQuery,
+  useSuiClient,
 } from "@mysten/dapp-kit";
-import type { SuiObjectData } from "@mysten/sui/client";
-import { Transaction } from "@mysten/sui/transactions";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useNetworkVariable } from "./networkConfig";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import ClipLoader from "react-spinners/ClipLoader";
+import { getCounterFields, createCounterService } from "./services";
+import { useNetworkVariable } from "./networkConfig";
 
 export function Counter({ id }: { id: string }) {
-  const counterPackageId = useNetworkVariable("counterPackageId");
-  const suiClient = useSuiClient();
   const currentAccount = useCurrentAccount();
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const { data, isPending, error, refetch } = useSuiClientQuery("getObject", {
@@ -28,53 +31,59 @@ export function Counter({ id }: { id: string }) {
 
   const [waitingForTxn, setWaitingForTxn] = useState("");
 
+  // Create counter service directly
+  const suiClient = useSuiClient();
+  const counterPackageId = useNetworkVariable("counterPackageId");
+  const counterService = useMemo(
+    () => createCounterService(suiClient, counterPackageId),
+    [suiClient, counterPackageId],
+  );
+
   const executeMoveCall = (method: "increment" | "reset") => {
     setWaitingForTxn(method);
 
-    const tx = new Transaction();
-
-    if (method === "reset") {
-      tx.moveCall({
-        arguments: [tx.object(id), tx.pure.u64(0)],
-        target: `${counterPackageId}::counter::set_value`,
-      });
-    } else {
-      tx.moveCall({
-        arguments: [tx.object(id)],
-        target: `${counterPackageId}::counter::increment`,
-      });
-    }
+    // Use service to create transaction
+    const tx =
+      method === "reset"
+      ? counterService.resetCounterTransaction(id)
+      : counterService.incrementCounterTransaction(id);
 
     signAndExecute(
       {
         transaction: tx,
       },
       {
-        onSuccess: (tx) => {
-          suiClient.waitForTransaction({ digest: tx.digest }).then(async () => {
-            await refetch();
-            setWaitingForTxn("");
-          });
+        onSuccess: async (tx) => {
+          await counterService.waitForTransaction(tx.digest);
+          await refetch();
+          setWaitingForTxn("");
         },
       },
     );
   };
 
-  if (isPending) return (
+  if (isPending)
+    return (
     <Alert>
-      <AlertDescription className="text-muted-foreground">Loading...</AlertDescription>
+        <AlertDescription className="text-muted-foreground">
+          Loading...
+        </AlertDescription>
     </Alert>
   );
 
-  if (error) return (
+  if (error)
+    return (
     <Alert variant="destructive">
       <AlertDescription>Error: {error.message}</AlertDescription>
     </Alert>
   );
 
-  if (!data.data) return (
+  if (!data.data)
+    return (
     <Alert>
-      <AlertDescription className="text-muted-foreground">Not found</AlertDescription>
+        <AlertDescription className="text-muted-foreground">
+          Not found
+        </AlertDescription>
     </Alert>
   );
 
@@ -107,17 +116,14 @@ export function Counter({ id }: { id: string }) {
             disabled={waitingForTxn !== ""}
             className="bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-md hover:shadow-lg text-white"
           >
-            {waitingForTxn === "reset" ? <ClipLoader size={20} color="white" /> : "Reset"}
+            {waitingForTxn === "reset" ? (
+              <ClipLoader size={20} color="white" />
+            ) : (
+              "Reset"
+            )}
           </Button>
         ) : null}
       </CardContent>
     </Card>
   );
-}
-function getCounterFields(data: SuiObjectData) {
-  if (data.content?.dataType !== "moveObject") {
-    return null;
-  }
-
-  return data.content.fields as { value: number; owner: string };
 }
