@@ -1,0 +1,84 @@
+{
+"projects": [
+	{
+		"name" : "DA VINCI TOWER",
+		"thumbnail" : "e1eec809-2fc1-4912-873c-148cb323a52a",
+		"moneySymbol" : "AED",
+		"city" : "Dubai",
+		"regionName" : "Dubai",
+		"description" : "DA VINCI TOWER, INTERIORS BY PAGANI features a 19-story structure with 2- to 4-bedroom apartments and penthouses, luxury finishes inspired by the Pagani brand. Amenities include an infinity pool, premium gym, spa, social lounge, 24\/7 security, covered parking, and green spaces with terraces, combining luxury design with modern conveniences.",
+		"totalunits" : 119
+	},
+	{
+		"name" : "DG1 Livinig",
+		"thumbnail" : "55e832e0-9041-49d4-b30b-41c0146a9c4e",
+		"moneySymbol" : "AED",
+		"city" : "Dubai",
+		"regionName" : "Dubai",
+		"description" : "DG1 Living in Dubai offers a 20-story building with 1, 2, and 3-bedroom units featuring modern finishes. Amenities include a pool, gym, spa, social lounge, children’s play area, 24\/7 security, underground parking, and green outdoor spaces, providing a comfortable and convenient living experience.",
+		"totalunits" : 63
+	},
+	{
+		"name" : "Golf Gate 2",
+		"thumbnail" : "8f0ded99-9279-407f-9b35-37d671fbb6ad",
+		"moneySymbol" : "AED",
+		"city" : "Dubai",
+		"regionName" : "Dubai",
+		"description" : "Golf Gate 2 is a 14-story residential, offering 1 and 2-bedroom apartments with modern designs and premium finishes. It features contemporary architecture and open-plan layouts. Amenities include a landscaped garden, community pool, and fully equipped gym, providing residents with luxury, comfort, and convenience.",
+		"totalunits" : 12
+	},
+	{
+		"name" : "Damac Casa",
+		"thumbnail" : "ae5a9565-4101-4679-80fc-c5fdd3765b99",
+		"moneySymbol" : "AED",
+		"city" : "Dubai",
+		"regionName" : "Dubai",
+		"description" : "Damac Casa is a 46-story luxury residential tower with 1- to 5-bedrooms stylish apartments and modern interiors. Amenities include a grand lobby, infinity pool, fitness center, landscaped gardens, concierge service, and secure parking. Spacious layouts, high-end finishes, and large windows maximize natural light and marina views, offering an elegant experience.",
+		"totalunits" : 113
+	},
+	{
+		"name" : "Mercedes-Benz Places",
+		"thumbnail" : "0170ed36-2240-44b5-86b5-60a02e008832",
+		"moneySymbol" : "AED",
+		"city" : "Dubai",
+		"regionName" : "Dubai",
+		"description" : "Mercedes-Benz Places is a 71-story, 341-meter-tall tower with 150 luxury residences, including 2- to 3-bedroom apartments and 4- to 5-bedroom penthouses. Amenities include a pool, gym, spa, parks, sports courts, retail stores, and secure parking. With opulent interiors and top-tier facilities, it offers a refined urban lifestyle.",
+		"totalunits" : 71
+	},
+	{
+		"name" : "Six Senses Residences",
+		"thumbnail" : "d83b9f5c-a0c5-4c5b-a473-be89f40a8d9a",
+		"moneySymbol" : "AED",
+		"city" : "Dubai",
+		"regionName" : "Dubai",
+		"description" : "Six Senses Residences offers luxury living with a spa, pools, gym, dining, and outdoor areas. Its modern, sustainable design includes elegant 2- to 5-bedroom apartments and villas with high-end finishes, equipped kitchens, and lavish bathrooms. Rising 122 stories, it stands in one of Dubai’s most prestigious locations.",
+		"totalunits" : 56
+	},
+	{
+		"name" : "Orla Dorchester Collection",
+		"thumbnail" : "56dedcd4-7b68-452b-9865-2cdb19f06786",
+		"moneySymbol" : "AED",
+		"city" : "Dubai",
+		"regionName" : "Dubai",
+		"description" : "ORLA Dorchester Collection by Omniyat is a 13–14-storey beachfront development with 91 ultra-luxury units, including 2–4-bedroom residences, Sky Palaces, a Super Penthouse, and a Beach Mansion. Built by Innovo Build, it features design by Foster + Partners and interiors by Yodezeen. Amenities include a private beach, pools, spa, gym, cinema, lounge, bowling alley, and valet, with parking for 330 cars.",
+		"totalunits" : 11
+	},
+	{
+		"name" : "Couture by Cavalli",
+		"thumbnail" : "aaf66bed-698f-4c0d-aa0a-185592df3648",
+		"moneySymbol" : "AED",
+		"city" : "Dubai",
+		"regionName" : "Dubai",
+		"description" : "Couture is a 12-story luxury residence blending modern elegance with opulent style. Influenced by the renowned fashion brand, it features a sophisticated lobby, private pool, and high-end gym. Spacious 3 to 5-bedroom Apartments and 6 bedroom Penthouses boast open layouts, premium fittings, and large windows for natural light, offering comfort and exclusivity.",
+		"totalunits" : 98
+	},
+	{
+		"name" : "ELO 2",
+		"thumbnail" : "02264fe5-db1c-43f3-9f52-ddc745685e16",
+		"moneySymbol" : "AED",
+		"city" : "Dubai",
+		"regionName" : "Dubai",
+		"description" : "ELO 2 is a 14-story residential, offering 1 and 2-bedroom apartments with modern design and high-end finishes. Amenities include a swimming pool, fitness center, landscaped gardens, social lounge, children's play area, 24\/7 security, and ample parking. Designed for contemporary living, ELO 2 offers style in a vibrant community.",
+		"totalunits" : 50
+	}
+]}
