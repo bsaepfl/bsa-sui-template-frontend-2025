@@ -44,7 +44,7 @@ function App() {
   };
 
   return (
-    <div className="container mx-auto p-6">
+    <div className="container mx-full p-6">
       <Card className="min-h-[500px]">
         <CardContent className="pt-6">
           {currentAccount ? (
