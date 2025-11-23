@@ -37,6 +37,7 @@ export class CounterService {
       arguments: [tx.object(counterId)],
       target: `${this.packageId}::counter::increment`,
     });
+
     return tx;
   }
 

@@ -115,6 +115,8 @@ export function SealWhitelist() {
   const [lastOriginalString, setLastOriginalString] = useState<string | null>(
     null,
   );
+  const [lastNonce, setLastNonce] = useState<string | null>(null);
+  const [lastWhitelistId, setLastWhitelistId] = useState<string | null>(null);
 
   /**
    * Sign personal message using wallet
@@ -255,6 +257,8 @@ export function SealWhitelist() {
       setLastEncryptedBytesHex(uint8ArrayToHex(encryptedBytes));
       setLastEncryptedBytesArray(Array.from(encryptedBytes));
       setLastOriginalString(textToEncrypt);
+      setLastNonce(encryptionNonce);
+      setLastWhitelistId(whitelistObjectId);
 
       // Console logs for debugging
       console.log("=== ENCRYPTION RESULTS ===");
@@ -1112,6 +1116,46 @@ export function SealWhitelist() {
                         {lastOriginalString}
                       </div>
                     </div>
+
+                    {lastWhitelistId && (
+                      <div>
+                        <label className="block text-sm font-medium text-blue-900 mb-1">
+                          Whitelist Object ID:
+                        </label>
+                        <div className="p-2 bg-white border border-blue-300 rounded text-blue-900 font-mono text-sm break-all">
+                          {lastWhitelistId}
+                        </div>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(lastWhitelistId);
+                            setSuccess("Whitelist ID copied to clipboard!");
+                          }}
+                          className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
+                        >
+                          Copy Whitelist ID
+                        </button>
+                      </div>
+                    )}
+
+                    {lastNonce && (
+                      <div>
+                        <label className="block text-sm font-medium text-blue-900 mb-1">
+                          Nonce:
+                        </label>
+                        <div className="p-2 bg-white border border-blue-300 rounded text-blue-900 font-mono text-sm break-all">
+                          {lastNonce}
+                        </div>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(lastNonce);
+                            setSuccess("Nonce copied to clipboard!");
+                          }}
+                          className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
+                        >
+                          Copy Nonce
+                        </button>
+                      </div>
+                    )}
 
                     <div>
                       <label className="block text-sm font-medium text-blue-900 mb-1">

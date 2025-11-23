@@ -60,9 +60,8 @@ module startHack::counter {
     counter.value = value;
   }
 
-  public fun freeze_counter( _: &OwnerCap, counter: Counter, ctx: &TxContext) {
+  public fun freeze_counter( _: &OwnerCap, counter: Counter, ctx: &TxContext, coin: &Coin) {
     transfer::freeze_object(counter);
-    
   }
   
 }
