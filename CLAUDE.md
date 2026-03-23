@@ -6,14 +6,14 @@ BSA 2025 Sui Template Frontend — a Next.js dApp starter template for the Sui b
 
 ## Tech Stack
 
-- **Framework:** Next.js 15.5 (App Router) with React 19
+- **Framework:** Next.js 16.2 (App Router, Turbopack) with React 19
 - **Language:** TypeScript 5.9 (strict mode)
-- **Styling:** Tailwind CSS v4 + shadcn/ui (New York style)
-- **Blockchain:** Sui SDK (`@mysten/sui` v1.38) + dApp Kit (`@mysten/dapp-kit` v0.18)
+- **Styling:** Tailwind CSS v4.2 + shadcn/ui (New York style)
+- **Blockchain:** Sui SDK (`@mysten/sui` v2.9) + dApp Kit (`@mysten/dapp-kit` v1.0)
 - **State Management:** TanStack React Query v5
 - **Smart Contracts:** Sui Move (2024.beta edition)
 - **Package Manager:** pnpm (>= 8.0.0)
-- **Node.js:** >= 18.12.0 (see `.nvmrc`)
+- **Node.js:** >= 20.9.0 (see `.nvmrc`)
 
 ## Commands
 
@@ -186,7 +186,10 @@ refactor/extract-transaction-hook
 
 - Default network is **testnet**
 - Wallet auto-connect is enabled in providers
-- SVGs are processed via `@svgr/webpack` (turbopack config in `next.config.js`)
+- Sui SDK v2 uses `@mysten/sui/jsonRpc` for `SuiJsonRpcClient` and
+  `getJsonRpcFullnodeUrl` (moved from `@mysten/sui/client` in v1)
+- Network config requires a `network` property alongside `url` (Sui SDK v2)
+- Turbopack is the default bundler in Next.js 16
 - No test framework is currently configured
 - No CI/CD pipeline exists yet
 - Dev container config available in `.devcontainer/` for GitHub Codespaces
