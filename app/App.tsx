@@ -5,38 +5,42 @@ import { useState, useEffect } from "react";
 import { Counter } from "./Counter";
 import { CreateCounter } from "./CreateCounter";
 import { CounterList } from "./components/CounterList";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { WalrusUpload } from "./WalrusUpload";
+import { WalrusRead } from "./WalrusRead";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+
+type View = "create" | "search" | "counter" | "walrus-upload" | "walrus-read";
 
 function App() {
   const currentAccount = useCurrentAccount();
   const [counterId, setCounter] = useState<string | null>(null);
-  const [view, setView] = useState<'create' | 'search' | 'counter'>('create');
+  const [view, setView] = useState<View>("create");
 
   useEffect(() => {
     const hash = window.location.hash.slice(1);
     if (isValidSuiObjectId(hash)) {
       setCounter(hash);
-      setView('counter');
+      setView("counter");
     }
   }, []);
 
   const handleCounterCreated = (id: string) => {
     window.location.hash = id;
     setCounter(id);
-    setView('counter');
+    setView("counter");
   };
 
   const handleCounterSelected = (id: string) => {
     window.location.hash = id;
     setCounter(id);
-    setView('counter');
+    setView("counter");
   };
 
   const goBackToSelection = () => {
     setCounter(null);
-    setView('create');
-    window.location.hash = '';
+    setView("create");
+    window.location.hash = "";
   };
 
   return (
@@ -46,63 +50,64 @@ function App() {
           {currentAccount ? (
             counterId ? (
               <div className="space-y-4">
-                {/* Back button when viewing a counter */}
                 <div className="flex justify-between items-center">
-                  <Button 
+                  <Button
                     onClick={goBackToSelection}
                     variant="outline"
                     className="border-gray-300 text-gray-700 hover:bg-gray-50"
                   >
-                    ← Back to Counter Selection
+                    &larr; Back
                   </Button>
                   <div className="text-sm text-gray-500">
-                    Counter ID: {counterId.slice(0, 8)}...{counterId.slice(-8)}
+                    Counter: {counterId.slice(0, 8)}...{counterId.slice(-8)}
                   </div>
                 </div>
-                
-                {/* Counter component */}
                 <Counter id={counterId} />
               </div>
             ) : (
               <div className="space-y-6">
-                {/* Navigation with proper styling */}
-                <div className="flex justify-center space-x-4">
-                  <Button
-                    variant={view === 'create' ? 'default' : 'outline'}
-                    onClick={() => setView('create')}
-                    className={view === 'create' 
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-                      : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                    }
-                  >
-                    Create New Counter
-                  </Button>
-                  <Button
-                    variant={view === 'search' ? 'default' : 'outline'}
-                    onClick={() => setView('search')}
-                    className={view === 'search' 
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-                      : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                    }
-                  >
-                    Find Existing Counter
-                  </Button>
+                {/* Navigation tabs */}
+                <div className="flex justify-center flex-wrap gap-2">
+                  {([
+                    ["create", "Create Counter"],
+                    ["search", "Find Counter"],
+                    ["walrus-upload", "Walrus Upload"],
+                    ["walrus-read", "Walrus Read"],
+                  ] as const).map(([key, label]) => (
+                    <Button
+                      key={key}
+                      variant={view === key ? "default" : "outline"}
+                      onClick={() => setView(key)}
+                      className={
+                        view === key
+                          ? "bg-blue-600 hover:bg-blue-700 text-white"
+                          : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                      }
+                    >
+                      {label}
+                    </Button>
+                  ))}
                 </div>
 
-                {/* Content based on view */}
-                {view === 'create' && (
+                {/* Content based on active view */}
+                {view === "create" && (
                   <CreateCounter onCreated={handleCounterCreated} />
                 )}
-                
-                {view === 'search' && (
+                {view === "search" && (
                   <CounterList onSelectCounter={handleCounterSelected} />
                 )}
+                {view === "walrus-upload" && <WalrusUpload />}
+                {view === "walrus-read" && <WalrusRead />}
               </div>
             )
           ) : (
             <div className="text-center py-12">
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">Welcome to Counter App</h2>
-              <p className="text-gray-600">Please connect your wallet to get started</p>
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                Welcome to Sui dApp Starter
+              </h2>
+              <p className="text-gray-600">
+                Please connect your wallet to get started
+              </p>
             </div>
           )}
         </CardContent>
