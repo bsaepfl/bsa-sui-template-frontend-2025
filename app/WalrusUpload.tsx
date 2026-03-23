@@ -17,7 +17,7 @@ import {
 } from "@mysten/dapp-kit";
 import { createWalrusService } from "./services";
 import ClipLoader from "react-spinners/ClipLoader";
-import { WriteFilesFlow } from "@mysten/walrus";
+import type { WriteFilesFlow } from "@mysten/walrus";
 
 type UploadTab = "file" | "text" | "json";
 

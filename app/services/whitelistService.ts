@@ -1,4 +1,4 @@
-import { SuiClient } from "@mysten/sui/client";
+import type { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { Transaction } from "@mysten/sui/transactions";
 
 export interface WhitelistData {
@@ -17,10 +17,10 @@ export interface CapData {
  * Handles all blockchain interactions for Whitelist smart contract
  */
 export class WhitelistService {
-  private suiClient: SuiClient;
+  private suiClient: SuiJsonRpcClient;
   private packageId: string;
 
-  constructor(suiClient: SuiClient, packageId: string) {
+  constructor(suiClient: SuiJsonRpcClient, packageId: string) {
     this.suiClient = suiClient;
     this.packageId = packageId;
   }
@@ -217,7 +217,7 @@ export class WhitelistService {
  * Factory function to create a WhitelistService instance
  */
 export function createWhitelistService(
-  suiClient: SuiClient,
+  suiClient: SuiJsonRpcClient,
   packageId: string,
 ): WhitelistService {
   return new WhitelistService(suiClient, packageId);

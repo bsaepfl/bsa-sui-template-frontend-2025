@@ -8,10 +8,8 @@
  * pnpm install @mysten/walrus @mysten/sui
  */
 
-import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
-import { getFullnodeUrl } from "@mysten/sui/client";
-import { walrus, WalrusFile, WalrusClient } from "@mysten/walrus";
-import { SuiClient } from "@mysten/sui/client";
+import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from "@mysten/sui/jsonRpc";
+import { walrus, WalrusFile } from "@mysten/walrus";
 
 export interface WalrusConfig {
   network?: "testnet" | "mainnet";
@@ -37,7 +35,7 @@ export class WalrusService {
     // From official docs: https://sdk.mystenlabs.com/walrus
     // For Next.js, we need to load WASM from CDN to avoid bundling issues
     this.client = new SuiJsonRpcClient({
-      url: getFullnodeUrl(network),
+      url: getJsonRpcFullnodeUrl(network),
       // Setting network on your client is required for walrus to work correctly
       network: network,
     }).$extend(

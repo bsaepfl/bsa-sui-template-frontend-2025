@@ -1,5 +1,4 @@
-import { SuiClient } from "@mysten/sui/client";
-import { getFullnodeUrl } from "@mysten/sui/client";
+import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from "@mysten/sui/jsonRpc";
 import { SealClient, SessionKey } from "@mysten/seal";
 import { Transaction } from "@mysten/sui/transactions";
 import { fromHex } from "@mysten/sui/utils";
@@ -41,12 +40,12 @@ export interface SealConfig {
  */
 export class SealService {
   private client: SealClient;
-  private suiClient: SuiClient;
+  private suiClient: SuiJsonRpcClient;
   private whitelistPackageId: string;
 
   constructor(config?: SealConfig) {
     const network = config?.network || "testnet";
-    this.suiClient = new SuiClient({ url: getFullnodeUrl(network) });
+    this.suiClient = new SuiJsonRpcClient({ url: getJsonRpcFullnodeUrl(network), network });
 
     // Default Seal key server object IDs for testnet
     // Use the first Mysten server by default, but allow custom selection
@@ -107,9 +106,6 @@ export class SealService {
         id: id,
         data,
       });
-      console.log("encryptedBytes", encryptedBytes);
-      console.log("backupKey", backupKey);
-
     return { encryptedBytes, backupKey };
   }
 
@@ -185,10 +181,6 @@ export class SealService {
       sessionKey,
       txBytes,
     });
-    console.log("decryptedBytes", decryptedBytes);
-    // Convert bytes to text
-    const decryptedText = new TextDecoder().decode(decryptedBytes);
-    console.log("decryptedText", decryptedText);
 
     return decryptedBytes;
   }
@@ -196,7 +188,7 @@ export class SealService {
   /**
    * Get the Sui client
    */
-  getSuiClient(): SuiClient {
+  getSuiClient(): SuiJsonRpcClient {
     return this.suiClient;
   }
 

@@ -1,4 +1,4 @@
-import { SuiClient } from '@mysten/sui/client';
+import type { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
 import { Transaction } from "@mysten/sui/transactions";
 import type { CounterData, CounterFields } from './types';
 import { getCounterFields } from './types';
@@ -8,10 +8,10 @@ import { getCounterFields } from './types';
  * Handles all blockchain interactions for Counter smart contract
  */
 export class CounterService {
-  private suiClient: SuiClient;
+  private suiClient: SuiJsonRpcClient;
   private packageId: string;
 
-  constructor(suiClient: SuiClient, packageId: string) {
+  constructor(suiClient: SuiJsonRpcClient, packageId: string) {
     this.suiClient = suiClient;
     this.packageId = packageId;
   }
@@ -188,7 +188,7 @@ export class CounterService {
  * Factory function to create a CounterService instance
  */
 export function createCounterService(
-  suiClient: SuiClient,
+  suiClient: SuiJsonRpcClient,
   packageId: string
 ): CounterService {
   return new CounterService(suiClient, packageId);

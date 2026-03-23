@@ -1,4 +1,4 @@
-import type { SuiObjectData } from "@mysten/sui/client";
+import type { SuiObjectData } from "@mysten/sui/jsonRpc";
 
 /**
  * Represents a Counter object from the blockchain

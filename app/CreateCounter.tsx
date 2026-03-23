@@ -26,8 +26,6 @@ export function CreateCounter({
   );
 
   function create() {
-    console.log('creating tx')
-    
     // Use service to create transaction
     const tx = counterService.createCounterTransaction();
 
