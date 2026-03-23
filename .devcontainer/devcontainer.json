@@ -1,10 +1,10 @@
 {
   "name": "BSA 2025 Frontend Template",
-  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-18-bullseye",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
   "features": {
     "ghcr.io/devcontainers/features/node:1": {
       "nodeGypDependencies": true,
-      "version": "18"
+      "version": "22"
     }
   },
   "customizations": {
