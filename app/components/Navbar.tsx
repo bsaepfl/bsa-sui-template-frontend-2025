@@ -16,18 +16,13 @@ import {
 const components: { title: string; href: string; description: string }[] = [
   {
     title: "Counter",
-    href: "/counter",
-    description: "View and interact with the counter component.",
+    href: "/",
+    description: "Create, increment, and manage on-chain counters.",
   },
   {
-    title: "Create Counter",
-    href: "/create",
-    description: "Create a new counter instance on the blockchain.",
-  },
-  {
-    title: "About",
-    href: "/about",
-    description: "Learn more about this counter application.",
+    title: "Walrus Storage",
+    href: "/",
+    description: "Upload and read blobs on Walrus decentralized storage.",
   },
 ];
 
@@ -39,7 +34,7 @@ export default function Navbar() {
           <NavigationMenuItem>
             <NavigationMenuLink asChild>
               <Link href="/" className="flex items-center space-x-2 font-semibold text-lg text-gray-900">
-                Counter App
+                Sui dApp Starter
               </Link>
             </NavigationMenuLink>
           </NavigationMenuItem>
@@ -55,10 +50,10 @@ export default function Navbar() {
                       href="/"
                     >
                       <div className="mb-2 mt-4 text-lg font-medium text-gray-900">
-                        Counter App
+                        Sui dApp Starter
                       </div>
                       <p className="text-sm leading-tight text-slate-600">
-                        A beautiful counter application built with Next.js and Tailwind CSS.
+                        Counter + Walrus storage starter for Sui hackathons.
                       </p>
                     </Link>
                   </NavigationMenuLink>
