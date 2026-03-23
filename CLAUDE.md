@@ -83,6 +83,105 @@ The `counter` module at `move/counter/sources/counter.move`:
 - **CSS:** Tailwind utility classes; use `cn()` from `@/lib/utils` for conditional classes
 - **Imports:** Use `@/` path alias for app-relative imports
 
+## Git Conventions
+
+### Commits
+
+Follow the [Conventional Commits](https://www.conventionalcommits.org/)
+specification:
+
+```
+<type>(scope): <description>
+
+[optional body]
+
+[optional footer]
+```
+
+**Types:**
+
+| Type       | When to use                                              |
+| ---------- | -------------------------------------------------------- |
+| `feat`     | New feature                                              |
+| `fix`      | Bug fix                                                  |
+| `docs`     | Documentation-only changes                               |
+| `style`    | Formatting, whitespace — no logic change                 |
+| `refactor` | Code change that neither fixes a bug nor adds a feature  |
+| `perf`     | Performance improvement                                  |
+| `test`     | Adding or updating tests                                 |
+| `build`    | Build system or dependency changes (pnpm, webpack, etc.) |
+| `ci`       | CI/CD configuration changes                              |
+| `chore`    | Maintenance tasks (gitignore, tool versions, etc.)       |
+
+**Scopes** (optional, project-specific): `ui`, `wallet`, `counter`, `move`,
+`config`, `deps`
+
+**Rules:**
+
+- Subject line: imperative mood, lowercase after colon, max 72 chars, no
+  trailing period
+- Body (if needed): blank line after subject, wrap at 72 chars, explain
+  **what/why** not how
+- Footer: reference issues with `Closes #N` or `Fixes #N`; note breaking
+  changes with `BREAKING CHANGE:`
+
+**Examples:**
+
+```
+feat(counter): add reset button to counter component
+```
+
+```
+fix(wallet): handle disconnection on network switch
+
+The wallet provider was not cleaning up state when the user switched
+networks, causing stale transaction errors.
+
+Fixes #42
+```
+
+### Branches
+
+Format: `<type>/<short-kebab-case-description>`
+
+```
+feat/add-counter-reset
+fix/wallet-disconnect-error
+docs/update-readme
+refactor/extract-transaction-hook
+```
+
+- Use the same type prefixes as commits
+- Keep descriptions short and descriptive (under 50 chars)
+- Branch from and merge to `main` via PR
+
+### Pull Requests
+
+**Title:** follows commit convention, under 72 characters
+
+**Body template:**
+
+```markdown
+## Summary
+<!-- 1-3 sentences: what this PR does and why -->
+
+## Changes
+<!-- Bulleted list of specific modifications -->
+
+## Test Plan
+<!-- How to verify: manual steps, automated tests, screenshots for UI -->
+
+## Related Issues
+<!-- Closes #N, Fixes #N -->
+```
+
+**Guidelines:**
+
+- Keep PRs small and focused on a single concern (aim for < 400 lines of diff)
+- Separate refactoring from feature work into distinct PRs
+- Link related issues in the description
+- Include screenshots for UI changes
+
 ## Development Notes
 
 - Default network is **testnet**
