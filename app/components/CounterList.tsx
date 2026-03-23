@@ -1,5 +1,5 @@
 'use client'
-import { SuiClient, getFullnodeUrl } from '@mysten/sui/client';
+import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from '@mysten/sui/jsonRpc';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -36,7 +36,7 @@ export function CounterList({ onSelectCounter }: { onSelectCounter: (id: string)
       // Search by object ID if it's a valid Sui object ID
       if (searchQuery.startsWith("0x") && searchQuery.length === 66) {
         // Create Sui client and query directly
-        const client = new SuiClient({ url: getFullnodeUrl("testnet") });
+        const client = new SuiJsonRpcClient({ url: getJsonRpcFullnodeUrl("testnet"), network: "testnet" });
         
         const object = await client.getObject({
           id: searchQuery,
