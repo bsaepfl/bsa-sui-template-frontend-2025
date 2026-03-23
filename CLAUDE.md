@@ -3,8 +3,8 @@
 ## Project Overview
 
 BSA 2025 Sui Template Frontend — a Next.js dApp starter for the Sui
-blockchain. Counter smart contract (Move) with a React/TypeScript frontend
-for creating, incrementing, and managing on-chain counters.
+blockchain. Features a counter smart contract (Move) and Walrus
+decentralized storage integration, with a React/TypeScript frontend.
 
 ## Tech Stack
 
@@ -13,6 +13,7 @@ for creating, incrementing, and managing on-chain counters.
 - **Styling:** Tailwind CSS v4.2 + shadcn/ui (New York style)
 - **Blockchain:** Sui SDK (`@mysten/sui` v2.9) + dApp Kit (`@mysten/dapp-kit`
   v1.0)
+- **Storage:** Walrus decentralized blob storage (HTTP API)
 - **State Management:** TanStack React Query v5
 - **Smart Contracts:** Sui Move (2024.beta edition)
 - **Package Manager:** pnpm (>= 8.0.0)
@@ -52,7 +53,9 @@ app/                        # Next.js app directory (also aliased as @/*)
 ├── App.tsx                 # Main app component (view routing)
 ├── Counter.tsx             # Counter display & interaction (increment/reset)
 ├── CreateCounter.tsx       # Counter creation form
-├── constants.ts            # Network-specific package IDs
+├── WalrusUpload.tsx        # Upload text/files to Walrus storage
+├── WalrusRead.tsx          # Read blobs from Walrus by blob ID
+├── constants.ts            # Network-specific package IDs + Walrus endpoints
 ├── networkConfig.ts        # Sui network configuration & hooks
 ├── globals.css             # Global styles + CSS variables
 ├── lib/
@@ -103,6 +106,35 @@ Module `counter::counter` at `move/counter/sources/counter.move`:
 - `increment(counter)`: public, increments by 1
 - `set_value(counter, value, ctx)`: owner-only, sets arbitrary value
 
+## Walrus Decentralized Storage
+
+Walrus is a decentralized blob storage network built on Sui. Data is
+erasure-coded and distributed across ~2,200 storage nodes on testnet.
+
+**How it works in this project:** We use the Walrus HTTP API (aggregator +
+publisher) for simplicity. No wallet signature is required — the public
+testnet publisher handles storage fees.
+
+- **Store:** `PUT {publisher}/v1/blobs?epochs=N` with raw body → returns
+  JSON with `blobId`
+- **Read:** `GET {aggregator}/v1/blobs/{blobId}` → returns raw blob content
+
+Endpoints (in `constants.ts`):
+
+- Aggregator: `https://aggregator.walrus-testnet.walrus.space`
+- Publisher: `https://publisher.walrus-testnet.walrus.space`
+
+**Key concepts:**
+
+- **Blob ID:** URL-safe base64 identifier derived from the blob content
+- **Epochs:** How long to store the data (more epochs = longer retention)
+- **Aggregator:** Read-only service that reconstructs blobs from storage nodes
+- **Publisher:** Write service that encodes and distributes blobs
+
+**For production / advanced use:** Install `@mysten/walrus` for the full
+TypeScript SDK with direct storage node communication and wallet-signed
+transactions. The HTTP API is simpler but relies on public infrastructure.
+
 ## Code Style
 
 - **Formatter:** Prettier (config in `prettier.config.cjs`)
@@ -127,7 +159,7 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 **Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`,
 `build`, `ci`, `chore`
 
-**Scopes:** `ui`, `wallet`, `counter`, `move`, `config`, `deps`
+**Scopes:** `ui`, `wallet`, `counter`, `walrus`, `move`, `config`, `deps`
 
 **Rules:** imperative mood, lowercase after colon, max 72 chars, no trailing
 period. Body explains what/why, not how. Footer: `Closes #N` or
