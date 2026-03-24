@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -10,54 +10,103 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { WALRUS_TESTNET_AGGREGATOR } from "./constants";
+import { detectMimeType, isPreviewableImage, isTextContent, formatBytes } from "@/lib/mimeDetection";
 import ClipLoader from "react-spinners/ClipLoader";
 
-export function WalrusRead() {
-  const [blobId, setBlobId] = useState("");
+interface ReadResult {
+  readonly text: string | null;
+  readonly objectUrl: string | null;
+  readonly aggregatorUrl: string;
+  readonly mimeType: string;
+  readonly size: number;
+}
+
+interface WalrusReadProps {
+  /** Pre-filled blob ID from upload history */
+  readonly initialBlobId?: string;
+  /** Known MIME type from upload history (avoids magic byte guessing) */
+  readonly knownMimeType?: string;
+}
+
+export function WalrusRead({ initialBlobId, knownMimeType }: WalrusReadProps) {
+  const [blobId, setBlobId] = useState(initialBlobId ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{
-    text: string | null;
-    url: string;
-    contentType: string;
-    size: number;
-  } | null>(null);
+  const [result, setResult] = useState<ReadResult | null>(null);
 
-  const readBlob = async () => {
+  // Update blobId when initialBlobId prop changes
+  useEffect(() => {
+    if (initialBlobId) {
+      setBlobId(initialBlobId);
+    }
+  }, [initialBlobId]);
+
+  // Clean up object URLs on unmount or new result
+  useEffect(() => {
+    return () => {
+      if (result?.objectUrl) {
+        URL.revokeObjectURL(result.objectUrl);
+      }
+    };
+  }, [result]);
+
+  const readBlob = useCallback(async () => {
     setLoading(true);
     setError(null);
+
+    // Revoke previous object URL before creating a new one
+    if (result?.objectUrl) {
+      URL.revokeObjectURL(result.objectUrl);
+    }
     setResult(null);
 
     try {
-      // GET from the Walrus aggregator HTTP API
-      const url = `${WALRUS_TESTNET_AGGREGATOR}/v1/blobs/${blobId}`;
-      const response = await fetch(url);
+      const aggregatorUrl = `${WALRUS_TESTNET_AGGREGATOR}/v1/blobs/${blobId}`;
+      const response = await fetch(aggregatorUrl);
 
       if (!response.ok) {
         throw new Error(`Read failed: ${response.status} ${response.statusText}`);
       }
 
-      const contentType = response.headers.get("content-type") ?? "application/octet-stream";
-      const blob = await response.blob();
-      const size = blob.size;
+      const arrayBuffer = await response.arrayBuffer();
+      const data = new Uint8Array(arrayBuffer);
+      const size = data.length;
 
-      // Try to display as text if it looks like text
+      // Use known MIME type from upload history, or detect from magic bytes
+      const mimeType = knownMimeType ?? detectMimeType(data);
+
+      // For text content, decode and display inline
       let text: string | null = null;
-      if (contentType.startsWith("text/") || contentType.includes("json") || size < 10_000) {
+      if (isTextContent(mimeType)) {
         try {
-          text = await blob.text();
+          text = new TextDecoder("utf-8", { fatal: true }).decode(data);
         } catch {
-          // Not text, that's fine
+          // Not valid UTF-8 despite detection, treat as binary
         }
       }
 
-      setResult({ text, url, contentType, size });
+      // Create object URL for binary content (images, downloads)
+      const objectUrl = URL.createObjectURL(new Blob([data], { type: mimeType }));
+
+      setResult({ text, objectUrl, aggregatorUrl, mimeType, size });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Read failed");
     } finally {
       setLoading(false);
     }
-  };
+  }, [blobId, knownMimeType, result?.objectUrl]);
+
+  const triggerDownload = useCallback(() => {
+    if (!result?.objectUrl) return;
+
+    const extension = getFileExtension(result.mimeType);
+    const filename = `walrus-${blobId.slice(0, 8)}${extension}`;
+
+    const anchor = document.createElement("a");
+    anchor.href = result.objectUrl;
+    anchor.download = filename;
+    anchor.click();
+  }, [result, blobId]);
 
   return (
     <Card className="max-w-lg mx-auto">
@@ -94,42 +143,61 @@ export function WalrusRead() {
         {result && (
           <div className="space-y-3">
             {/* Metadata */}
-            <div className="flex gap-4 text-xs text-gray-500">
-              <span>Type: {result.contentType}</span>
-              <span>Size: {formatBytes(result.size)}</span>
+            <div className="flex items-center justify-between">
+              <div className="flex gap-4 text-xs text-gray-500">
+                <span>Type: {result.mimeType}</span>
+                <span>Size: {formatBytes(result.size)}</span>
+              </div>
+              <Button
+                onClick={triggerDownload}
+                variant="outline"
+                size="sm"
+                className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                Download
+              </Button>
             </div>
 
-            {/* Content display */}
-            {result.text !== null ? (
+            {/* Image preview */}
+            {isPreviewableImage(result.mimeType) && result.objectUrl && (
+              <div className="p-2 bg-gray-50 border border-gray-200 rounded-md">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={result.objectUrl}
+                  alt={`Walrus blob ${blobId.slice(0, 8)}`}
+                  className="max-w-full max-h-64 mx-auto rounded"
+                />
+              </div>
+            )}
+
+            {/* Text content display */}
+            {result.text !== null && (
               <div className="p-4 bg-gray-50 border border-gray-200 rounded-md">
                 <pre className="whitespace-pre-wrap break-all text-sm text-gray-800 max-h-64 overflow-auto">
                   {result.text}
                 </pre>
               </div>
-            ) : (
+            )}
+
+            {/* Binary non-image fallback */}
+            {result.text === null && !isPreviewableImage(result.mimeType) && (
               <div className="p-4 bg-gray-50 border border-gray-200 rounded-md text-center">
-                <p className="text-sm text-gray-600 mb-2">Binary blob ({result.contentType})</p>
-                <a
-                  href={result.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline text-sm"
-                >
-                  Download from aggregator
-                </a>
+                <p className="text-sm text-gray-600 mb-2">
+                  Binary blob ({result.mimeType})
+                </p>
               </div>
             )}
 
-            {/* Direct link */}
+            {/* Aggregator link */}
             <p className="text-xs text-gray-400">
               Direct URL:{" "}
               <a
-                href={result.url}
+                href={result.aggregatorUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-500 hover:underline break-all"
               >
-                {result.url}
+                {result.aggregatorUrl}
               </a>
             </p>
           </div>
@@ -139,8 +207,20 @@ export function WalrusRead() {
   );
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+/** Map common MIME types to file extensions for download filenames. */
+function getFileExtension(mimeType: string): string {
+  const EXTENSIONS: Record<string, string> = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/svg+xml": ".svg",
+    "application/pdf": ".pdf",
+    "application/json": ".json",
+    "application/zip": ".zip",
+    "application/xml": ".xml",
+    "text/plain": ".txt",
+    "text/html": ".html",
+  };
+  return EXTENSIONS[mimeType] ?? "";
 }

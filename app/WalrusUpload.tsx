@@ -1,7 +1,5 @@
 "use client";
-
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -9,167 +7,668 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { WALRUS_TESTNET_PUBLISHER } from "./constants";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  useCurrentAccount,
+  useSignAndExecuteTransaction,
+  useSuiClient,
+} from "@mysten/dapp-kit";
 import ClipLoader from "react-spinners/ClipLoader";
+import { WalrusRead } from "./WalrusRead";
+import { useWalBalance } from "./hooks/useWalBalance";
+import { useOwnedBlobs, type StoredBlob } from "./hooks/useOwnedBlobs";
+import { useMemo } from "react";
+import { createWalrusDirectService } from "./services";
 
-// Response shape from the Walrus publisher HTTP API
-interface WalrusStoreResponse {
-  newlyCreated?: {
-    blobObject: {
-      blobId: string;
-      id: string;
-    };
-  };
-  alreadyCertified?: {
-    blobId: string;
-  };
-}
+type UploadTab = "file" | "text" | "json";
+type UploadMode = "publisher" | "sdk";
 
 export function WalrusUpload() {
-  const [text, setText] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [mode, setMode] = useState<"text" | "file">("text");
-  const [epochs, setEpochs] = useState(3);
-  const [uploading, setUploading] = useState(false);
-  const [result, setResult] = useState<{ blobId: string } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const currentAccount = useCurrentAccount();
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+  const suiClient = useSuiClient();
 
-  const upload = async () => {
+  // Upload mode: free publisher or pay with WAL
+  const [uploadMode, setUploadMode] = useState<UploadMode>("publisher");
+
+  // Walrus direct service for SDK mode
+  const walrusDirect = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    return createWalrusDirectService({ network: "testnet", epochs: 10 });
+  }, []);
+
+  // WAL token balance
+  const { formattedBalance: walBalance, isLoading: walLoading } = useWalBalance("testnet");
+
+  // Persistent blob history (localStorage + on-chain)
+  const { blobs: uploadHistory, addBlob, clearHistory } = useOwnedBlobs();
+
+  // State for download from history
+  const [readBlobId, setReadBlobId] = useState<string | undefined>(undefined);
+  const [readMimeType, setReadMimeType] = useState<string | undefined>(undefined);
+
+  const [activeTab, setActiveTab] = useState<UploadTab>("file");
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  // Text/JSON upload state
+  const [textContent, setTextContent] = useState("");
+  const [jsonContent, setJsonContent] = useState("");
+
+  /**
+   * Upload raw bytes to Walrus via the publisher HTTP API.
+   * Stores a raw blob (NOT a quilt), so aggregator returns exact bytes.
+   * The public testnet publisher handles storage fees — no WAL needed.
+   */
+  const uploadToPublisher = async (
+    data: Uint8Array,
+    mimeType: string,
+    filename?: string,
+  ): Promise<StoredBlob> => {
+    const publisherUrl = "https://publisher.walrus-testnet.walrus.space";
+    const response = await fetch(`${publisherUrl}/v1/blobs?epochs=10`, {
+      method: "PUT",
+      body: new Blob([data.buffer as ArrayBuffer]),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Publisher error ${response.status}: ${text}`);
+    }
+
+    const result = await response.json();
+    // Response can be { newlyCreated: { blobObject: { blobId, id } } }
+    // or { alreadyCertified: { blobId, ... } }
+    const blobId =
+      result.newlyCreated?.blobObject?.blobId ??
+      result.alreadyCertified?.blobId;
+    const objectId =
+      result.newlyCreated?.blobObject?.id ??
+      result.alreadyCertified?.blobId ??
+      blobId;
+
+    if (!blobId) {
+      throw new Error("No blobId in publisher response");
+    }
+
+    const storedBlob: StoredBlob = {
+      blobId,
+      objectId,
+      url: `https://aggregator.walrus-testnet.walrus.space/v1/blobs/${blobId}`,
+      size: data.length,
+      mimeType,
+      timestamp: Date.now(),
+      filename,
+      source: "publisher",
+    };
+    addBlob(storedBlob);
+    return storedBlob;
+  };
+
+  /**
+   * Upload raw bytes via Walrus SDK (user pays WAL).
+   * Uses writeBlobFlow (raw blob, NOT quilt) so aggregator returns exact bytes.
+   * Blob object is owned by the user on-chain.
+   */
+  const uploadWithSDK = async (
+    data: Uint8Array,
+    mimeType: string,
+    filename?: string,
+  ): Promise<StoredBlob> => {
+    if (!walrusDirect) throw new Error("Walrus service not available");
+    if (!currentAccount) throw new Error("Connect your wallet first");
+
+    // writeBlobFlow stores a raw blob (no quilt wrapper)
+    const flow = walrusDirect.writeBlobFlow(data);
+
+    // Step 1: Encode
+    await flow.encode();
+
+    // Step 2: Register (user signs tx, pays WAL)
+    const registerTx = flow.register({
+      owner: currentAccount.address,
+      epochs: 10,
+      deletable: true,
+    });
+
+    let registerDigest = "";
+    let blobObjectId = "";
+    await new Promise<void>((resolve, reject) => {
+      signAndExecute(
+        { transaction: registerTx },
+        {
+          onSuccess: async ({ digest }) => {
+            registerDigest = digest;
+            const result = await suiClient.waitForTransaction({
+              digest,
+              options: { showEffects: true, showEvents: true },
+            });
+            // Extract Sui object ID from created objects
+            const created = result.effects?.created?.[0];
+            if (created?.reference?.objectId) {
+              blobObjectId = created.reference.objectId;
+            }
+            resolve();
+          },
+          onError: reject,
+        },
+      );
+    });
+
+    // Step 3: Upload data to storage nodes
+    await flow.upload({ digest: registerDigest });
+
+    // Step 4: Certify (user signs tx)
+    const certifyTx = flow.certify();
+    await new Promise<void>((resolve, reject) => {
+      signAndExecute(
+        { transaction: certifyTx },
+        {
+          onSuccess: async ({ digest }) => {
+            await suiClient.waitForTransaction({ digest });
+            resolve();
+          },
+          onError: reject,
+        },
+      );
+    });
+
+    // Step 5: Get certified blob info
+    const certifiedBlob = await flow.getBlob();
+    const blobId = certifiedBlob.blobId;
+    const suiObjectId = blobObjectId || certifiedBlob.blobObjectId || blobId;
+
+    const storedBlob: StoredBlob = {
+      blobId,
+      objectId: suiObjectId,
+      url: `https://aggregator.walrus-testnet.walrus.space/v1/blobs/${blobId}`,
+      size: data.length,
+      mimeType,
+      timestamp: Date.now(),
+      filename,
+      source: "sdk",
+    };
+    addBlob(storedBlob);
+    return storedBlob;
+  };
+
+  /**
+   * Upload dispatcher: routes to publisher or SDK based on mode.
+   */
+  const uploadData = async (
+    data: Uint8Array,
+    mimeType: string,
+    filename?: string,
+  ): Promise<StoredBlob> => {
+    if (uploadMode === "sdk") {
+      return uploadWithSDK(data, mimeType, filename);
+    }
+    return uploadToPublisher(data, mimeType, filename);
+  };
+
+  /**
+   * Handle file upload via publisher HTTP API (raw blob, no quilt).
+   */
+  const handleFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
     setUploading(true);
     setError(null);
-    setResult(null);
+    setSuccess(null);
 
     try {
-      // Build the request body: either raw text or a file
-      const body = mode === "text" ? new TextEncoder().encode(text) : file;
-      if (!body) {
-        setError("Nothing to upload");
-        return;
-      }
+      const contents = new Uint8Array(await file.arrayBuffer());
+      const mimeType = file.type || "application/octet-stream";
 
-      // PUT to the Walrus publisher HTTP API
-      const response = await fetch(
-        `${WALRUS_TESTNET_PUBLISHER}/v1/blobs?epochs=${epochs}`,
-        { method: "PUT", body },
-      );
-
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
-      }
-
-      const data: WalrusStoreResponse = await response.json();
-
-      // The API returns either newlyCreated or alreadyCertified
-      const blobId =
-        data.newlyCreated?.blobObject.blobId ?? data.alreadyCertified?.blobId;
-
-      if (!blobId) {
-        throw new Error("No blob ID in response");
-      }
-
-      setResult({ blobId });
+      await uploadData(contents, mimeType, file.name);
+      setSuccess(`File "${file.name}" uploaded successfully!`);
+      event.target.value = "";
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      setError(`Upload failed: ${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {
       setUploading(false);
     }
   };
 
+  /**
+   * Handle text upload using WalrusFile API with writeFilesFlow
+   */
+  const handleTextUpload = async () => {
+    if (!textContent.trim()) {
+      setError("Please enter some text to upload");
+      return;
+    }
+
+    setUploading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const data = new TextEncoder().encode(textContent);
+      await uploadData(data, "text/plain", "text.txt");
+      setSuccess("Text uploaded successfully!");
+      setTextContent("");
+    } catch (err) {
+      setError(`Upload failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  /**
+   * Handle JSON upload using WalrusFile API with writeFilesFlow
+   */
+  const handleJsonUpload = async () => {
+    if (!jsonContent.trim()) {
+      setError("Please enter JSON data to upload");
+      return;
+    }
+
+    try {
+      JSON.parse(jsonContent);
+    } catch {
+      setError("Invalid JSON format. Please check your syntax.");
+      return;
+    }
+
+    setUploading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const data = new TextEncoder().encode(jsonContent);
+      await uploadData(data, "application/json", "data.json");
+      setSuccess("JSON uploaded successfully!");
+      setJsonContent("");
+    } catch (err) {
+      setError(`Upload failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  /**
+   * Copy blob ID or URL to clipboard
+   */
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setSuccess(`${label} copied to clipboard!`);
+    setTimeout(() => setSuccess(null), 2000);
+  };
+
+  /**
+   * Format file size
+   */
+  const formatSize = (bytes: number): string => {
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+  };
+
   return (
-    <Card className="max-w-lg mx-auto">
-      <CardHeader>
-        <CardTitle className="text-gray-900">Store on Walrus</CardTitle>
-        <CardDescription className="text-gray-600">
-          Upload text or a file to Walrus decentralized storage. Data is
-          erasure-coded across ~2,200 storage nodes on testnet.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Mode toggle */}
-        <div className="flex gap-2">
-          <Button
-            variant={mode === "text" ? "default" : "outline"}
-            onClick={() => setMode("text")}
-            className={
-              mode === "text"
-                ? "bg-blue-600 hover:bg-blue-700 text-white"
-                : "border-gray-300 text-gray-700 hover:bg-gray-50"
-            }
-            size="sm"
-          >
-            Text
-          </Button>
-          <Button
-            variant={mode === "file" ? "default" : "outline"}
-            onClick={() => setMode("file")}
-            className={
-              mode === "file"
-                ? "bg-blue-600 hover:bg-blue-700 text-white"
-                : "border-gray-300 text-gray-700 hover:bg-gray-50"
-            }
-            size="sm"
-          >
-            File
-          </Button>
-        </div>
+    <div className="container mx-auto p-6 max-w-6xl">
+      <div className="space-y-6">
+        {/* Header */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-3xl text-black">
+              Walrus Storage Upload
+            </CardTitle>
+            <CardDescription className="text-black">
+              Upload files, text, or JSON to Walrus decentralized storage
+              network. Files are stored for 10 epochs (~30 days on testnet).
+            </CardDescription>
+            {currentAccount && (
+              <div className="mt-3 flex flex-wrap items-center gap-4 text-sm">
+                <span className="text-gray-600">
+                  WAL:{" "}
+                  <span className="font-mono font-semibold text-gray-900">
+                    {walLoading ? "..." : walBalance}
+                  </span>
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-500">Upload mode:</span>
+                  <select
+                    value={uploadMode}
+                    onChange={(e) => setUploadMode(e.target.value as UploadMode)}
+                    className="px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+                  >
+                    <option value="publisher">Free (Publisher)</option>
+                    <option value="sdk">Pay with WAL (SDK)</option>
+                  </select>
+                </div>
+                {uploadMode === "sdk" && (
+                  <span className="text-xs text-amber-600">
+                    Requires WAL tokens and wallet signature
+                  </span>
+                )}
+              </div>
+            )}
+          </CardHeader>
+        </Card>
 
-        {/* Input */}
-        {mode === "text" ? (
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Enter text to store on Walrus..."
-            className="w-full h-32 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 resize-none"
-          />
-        ) : (
-          <input
-            type="file"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="w-full text-gray-900"
-          />
+        {/* Status Messages */}
+        {error && (
+          <Alert variant="destructive" className="bg-red-50 border-red-200">
+            <AlertDescription className="text-red-900">
+              {error}
+            </AlertDescription>
+          </Alert>
         )}
 
-        {/* Epochs selector */}
-        <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">Storage epochs:</label>
-          <select
-            value={epochs}
-            onChange={(e) => setEpochs(Number(e.target.value))}
-            className="px-2 py-1 border border-gray-300 rounded-md text-gray-900 text-sm"
-          >
-            <option value={1}>1</option>
-            <option value={3}>3</option>
-            <option value={5}>5</option>
-            <option value={10}>10</option>
-          </select>
-          <span className="text-xs text-gray-500">(longer = stored longer)</span>
-        </div>
+        {success && (
+          <Alert className="bg-green-50 text-green-900 border-green-200">
+            <AlertDescription className="text-green-900">
+              {success}
+            </AlertDescription>
+          </Alert>
+        )}
 
-        {/* Upload button */}
-        <Button
-          onClick={upload}
-          disabled={uploading || (mode === "text" ? !text : !file)}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-400"
-        >
-          {uploading ? <ClipLoader size={20} color="white" /> : "Upload to Walrus"}
-        </Button>
-
-        {/* Error */}
-        {error && <p className="text-red-600 text-sm">{error}</p>}
-
-        {/* Result */}
-        {result && (
-          <div className="p-4 bg-green-50 border border-green-200 rounded-md space-y-2">
-            <p className="text-green-800 font-semibold">Stored successfully!</p>
-            <div>
-              <p className="text-xs text-gray-500">Blob ID (save this to retrieve later):</p>
-              <code className="block text-xs bg-gray-100 p-2 rounded break-all text-gray-800">
-                {result.blobId}
-              </code>
+        {/* Upload Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-black">Upload Content</CardTitle>
+            {/* Tabs */}
+            <div className="flex gap-2 pt-4">
+              <Button
+                variant={activeTab === "file" ? "default" : "outline"}
+                onClick={() => setActiveTab("file")}
+                className={
+                  activeTab === "file" ? "bg-blue-600 hover:bg-blue-700" : ""
+                }
+              >
+                📁 File
+              </Button>
+              <Button
+                variant={activeTab === "text" ? "default" : "outline"}
+                onClick={() => setActiveTab("text")}
+                className={
+                  activeTab === "text" ? "bg-blue-600 hover:bg-blue-700" : ""
+                }
+              >
+                📝 Text
+              </Button>
+              <Button
+                variant={activeTab === "json" ? "default" : "outline"}
+                onClick={() => setActiveTab("json")}
+                className={
+                  activeTab === "json" ? "bg-blue-600 hover:bg-blue-700" : ""
+                }
+              >
+                🔧 JSON
+              </Button>
             </div>
-          </div>
+          </CardHeader>
+          <CardContent>
+            {/* File Upload */}
+            {activeTab === "file" && (
+              <div className="space-y-4">
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-500 transition-colors">
+                  <input
+                    type="file"
+                    onChange={handleFileUpload}
+                    disabled={uploading}
+                    className="hidden"
+                    id="file-upload"
+                    accept="*/*"
+                  />
+                  <label
+                    htmlFor="file-upload"
+                    className="cursor-pointer flex flex-col items-center"
+                  >
+                    <div className="text-5xl mb-4">📤</div>
+                    <div className="text-lg font-semibold text-black mb-2">
+                      {uploading
+                        ? "Uploading..."
+                        : "Choose a file or drag it here"}
+                    </div>
+                    <div className="text-sm text-black">
+                      Any file type supported • Max size depends on Walrus
+                      limits
+                    </div>
+                  </label>
+                </div>
+                {uploading && (
+                  <div className="flex items-center justify-center">
+                    <ClipLoader size={30} color="#2563eb" />
+                    <span className="ml-3 text-black">
+                      Uploading to Walrus...
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Text Upload */}
+            {activeTab === "text" && (
+              <div className="space-y-4">
+                <textarea
+                  value={textContent}
+                  onChange={(e) => setTextContent(e.target.value)}
+                  placeholder="Enter your text here..."
+                  className="w-full h-64 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none font-mono text-sm text-black placeholder:text-gray-500"
+                  disabled={uploading}
+                />
+                <Button
+                  onClick={handleTextUpload}
+                  disabled={uploading || !textContent.trim()}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                  size="lg"
+                >
+                  {uploading ? (
+                    <>
+                      <ClipLoader size={20} color="white" className="mr-2" />
+                      Uploading...
+                    </>
+                  ) : (
+                    "📤 Upload Text to Walrus"
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {/* JSON Upload */}
+            {activeTab === "json" && (
+              <div className="space-y-4">
+                <textarea
+                  value={jsonContent}
+                  onChange={(e) => setJsonContent(e.target.value)}
+                  placeholder={
+                    '{\n  "key": "value",\n  "data": "your JSON here"\n}'
+                  }
+                  className="w-full h-64 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none font-mono text-sm text-black placeholder:text-gray-500"
+                  disabled={uploading}
+                />
+                <Button
+                  onClick={handleJsonUpload}
+                  disabled={uploading || !jsonContent.trim()}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                  size="lg"
+                >
+                  {uploading ? (
+                    <>
+                      <ClipLoader size={20} color="white" className="mr-2" />
+                      Uploading...
+                    </>
+                  ) : (
+                    "📤 Upload JSON to Walrus"
+                  )}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Upload History */}
+        {uploadHistory.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-black">
+                Upload History ({uploadHistory.length})
+              </CardTitle>
+              <CardDescription className="text-black flex items-center justify-between">
+                <span>Your uploaded blobs (persisted in browser)</span>
+                <Button size="sm" variant="outline" onClick={clearHistory} className="text-xs">
+                  Clear History
+                </Button>
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {uploadHistory.map((item, index) => (
+                  <div
+                    key={index}
+                    className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 space-y-2">
+                        {item.filename && (
+                          <div className="font-semibold text-gray-900">
+                            📄 {item.filename}
+                          </div>
+                        )}
+                        <div className="text-sm text-black">
+                          <span className="font-medium">Type:</span> {item.mimeType}{" "}
+                          • <span className="font-medium">Size:</span>{" "}
+                          {formatSize(item.size)} •{" "}
+                          <span className="font-medium">Time:</span>{" "}
+                          {new Date(item.timestamp).toLocaleTimeString()}
+                        </div>
+                        <div className="flex flex-col gap-2 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-black">
+                              Sui Metadata ID:
+                            </span>
+                            <code className="bg-gray-100 px-2 py-1 rounded flex-1 truncate text-black">
+                              {item.objectId}
+                            </code>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                copyToClipboard(item.objectId, "Sui Metadata ID")
+                              }
+                              className="text-xs text-black"
+                            >
+                              Copy
+                            </Button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-black">
+                              Blob ID:
+                            </span>
+                            <code className="bg-gray-100 px-2 py-1 rounded flex-1 truncate text-black">
+                              {item.blobId}
+                            </code>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                copyToClipboard(item.blobId, "Blob ID")
+                              }
+                              className="text-xs text-black"
+                            >
+                              Copy
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex gap-2 flex-wrap">
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          window.open(
+                            `https://testnet.suivision.xyz/object/${item.objectId}`,
+                            "_blank",
+                          )
+                        }
+                        className="bg-purple-600 hover:bg-purple-700 text-white"
+                      >
+                        🔍 View on SuiVision
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          window.open(
+                            `https://walruscan.com/testnet/blob/${item.blobId}`,
+                            "_blank",
+                          )
+                        }
+                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                      >
+                        🔍 View on WalrusCan
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => copyToClipboard(item.url, "URL")}
+                        className="text-black border-gray-300"
+                      >
+                        📋 Copy URL
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setReadBlobId(item.blobId);
+                          setReadMimeType(item.mimeType);
+                        }}
+                        className="text-black border-gray-300"
+                      >
+                        📥 Read
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         )}
-      </CardContent>
-    </Card>
+
+        {/* Read / Download Section */}
+        <WalrusRead initialBlobId={readBlobId} knownMimeType={readMimeType} />
+
+        {/* Info Card */}
+        <Card className="bg-blue-50">
+          <CardHeader>
+            <CardTitle className="text-blue-900">
+              ℹ️ About Walrus Storage
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-blue-900 space-y-2">
+            <p>
+              <strong>Walrus</strong> is a decentralized storage network built
+              on Sui blockchain.
+            </p>
+            <ul className="list-disc list-inside space-y-1 ml-4">
+              <li>Files are stored redundantly across multiple nodes</li>
+              <li>Content is permanently accessible via blob ID</li>
+              <li>
+                Storage duration is set in epochs (currently 10 epochs ≈ 30
+                days)
+              </li>
+              <li>No central point of failure - fully decentralized</li>
+              <li>Retrieve files anytime using the blob ID or URL</li>
+            </ul>
+            <p className="mt-4">
+              <strong>Network:</strong> Testnet •{" "}
+              <strong>Storage Duration:</strong> 10 epochs
+            </p>
+            <p className="mt-4 text-sm">
+              For documentation and resources, visit the{" "}
+              <strong>Resources</strong> tab in the navigation bar.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 }
