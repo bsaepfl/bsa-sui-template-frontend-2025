@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@mysten/dapp-kit": "^1.0.4",
+    "@mysten/enoki": "^1.0.4",
     "@mysten/seal": "^1.1.1",
     "@mysten/sui": "^2.9.1",
     "@mysten/walrus": "^1.1.0",
