@@ -110,3 +110,9 @@ temp/
 
 # Turbo
 .turbo
+
+# Claude Code context
+.claude/
+CLAUDE.md
+NIGHT_SHIFT_*.md
+NIGHT_SHIFT_SPEC.md
