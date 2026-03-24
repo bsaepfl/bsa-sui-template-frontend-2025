@@ -13,18 +13,9 @@ import { useCurrentAccount } from "@mysten/dapp-kit";
 import ClipLoader from "react-spinners/ClipLoader";
 import { WalrusRead } from "./WalrusRead";
 import { useWalBalance } from "./hooks/useWalBalance";
+import { useOwnedBlobs, type StoredBlob } from "./hooks/useOwnedBlobs";
 
 type UploadTab = "file" | "text" | "json";
-
-interface UploadedItem {
-  blobId: string;
-  id: string; // Metadata ID for explorer links
-  url: string;
-  size: number;
-  type: string;
-  timestamp: number;
-  filename?: string;
-}
 
 export function WalrusUpload() {
   const currentAccount = useCurrentAccount();
@@ -32,13 +23,15 @@ export function WalrusUpload() {
   // WAL token balance
   const { formattedBalance: walBalance, isLoading: walLoading } = useWalBalance("testnet");
 
+  // Persistent blob history (localStorage + on-chain)
+  const { blobs: uploadHistory, addBlob, clearHistory } = useOwnedBlobs();
+
   // State for download from history
   const [readBlobId, setReadBlobId] = useState<string | undefined>(undefined);
   const [readMimeType, setReadMimeType] = useState<string | undefined>(undefined);
 
   const [activeTab, setActiveTab] = useState<UploadTab>("file");
   const [uploading, setUploading] = useState(false);
-  const [uploadHistory, setUploadHistory] = useState<UploadedItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -55,7 +48,7 @@ export function WalrusUpload() {
     data: Uint8Array,
     mimeType: string,
     filename?: string,
-  ): Promise<UploadedItem> => {
+  ): Promise<StoredBlob> => {
     const publisherUrl = "https://publisher.walrus-testnet.walrus.space";
     const response = await fetch(`${publisherUrl}/v1/blobs?epochs=10`, {
       method: "PUT",
@@ -82,15 +75,18 @@ export function WalrusUpload() {
       throw new Error("No blobId in publisher response");
     }
 
-    return {
+    const storedBlob: StoredBlob = {
       blobId,
-      id: objectId,
+      objectId,
       url: `https://aggregator.walrus-testnet.walrus.space/v1/blobs/${blobId}`,
       size: data.length,
-      type: mimeType,
+      mimeType,
       timestamp: Date.now(),
       filename,
+      source: "publisher",
     };
+    addBlob(storedBlob);
+    return storedBlob;
   };
 
   /**
@@ -110,8 +106,7 @@ export function WalrusUpload() {
       const contents = new Uint8Array(await file.arrayBuffer());
       const mimeType = file.type || "application/octet-stream";
 
-      const uploadedItem = await uploadToPublisher(contents, mimeType, file.name);
-      setUploadHistory([uploadedItem, ...uploadHistory]);
+      await uploadToPublisher(contents, mimeType, file.name);
       setSuccess(`File "${file.name}" uploaded successfully!`);
       event.target.value = "";
     } catch (err) {
@@ -136,8 +131,7 @@ export function WalrusUpload() {
 
     try {
       const data = new TextEncoder().encode(textContent);
-      const uploadedItem = await uploadToPublisher(data, "text/plain", "text.txt");
-      setUploadHistory([uploadedItem, ...uploadHistory]);
+      await uploadToPublisher(data, "text/plain", "text.txt");
       setSuccess("Text uploaded successfully!");
       setTextContent("");
     } catch (err) {
@@ -169,8 +163,7 @@ export function WalrusUpload() {
 
     try {
       const data = new TextEncoder().encode(jsonContent);
-      const uploadedItem = await uploadToPublisher(data, "application/json", "data.json");
-      setUploadHistory([uploadedItem, ...uploadHistory]);
+      await uploadToPublisher(data, "application/json", "data.json");
       setSuccess("JSON uploaded successfully!");
       setJsonContent("");
     } catch (err) {
@@ -386,8 +379,11 @@ export function WalrusUpload() {
               <CardTitle className="text-black">
                 Upload History ({uploadHistory.length})
               </CardTitle>
-              <CardDescription className="text-black">
-                Your recently uploaded items
+              <CardDescription className="text-black flex items-center justify-between">
+                <span>Your uploaded blobs (persisted in browser)</span>
+                <Button size="sm" variant="outline" onClick={clearHistory} className="text-xs">
+                  Clear History
+                </Button>
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -405,7 +401,7 @@ export function WalrusUpload() {
                           </div>
                         )}
                         <div className="text-sm text-black">
-                          <span className="font-medium">Type:</span> {item.type}{" "}
+                          <span className="font-medium">Type:</span> {item.mimeType}{" "}
                           • <span className="font-medium">Size:</span>{" "}
                           {formatSize(item.size)} •{" "}
                           <span className="font-medium">Time:</span>{" "}
@@ -417,13 +413,13 @@ export function WalrusUpload() {
                               Sui Metadata ID:
                             </span>
                             <code className="bg-gray-100 px-2 py-1 rounded flex-1 truncate text-black">
-                              {item.id}
+                              {item.objectId}
                             </code>
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() =>
-                                copyToClipboard(item.id, "Sui Metadata ID")
+                                copyToClipboard(item.objectId, "Sui Metadata ID")
                               }
                               className="text-xs text-black"
                             >
@@ -456,7 +452,7 @@ export function WalrusUpload() {
                         size="sm"
                         onClick={() =>
                           window.open(
-                            `https://testnet.suivision.xyz/object/${item.id}`,
+                            `https://testnet.suivision.xyz/object/${item.objectId}`,
                             "_blank",
                           )
                         }
@@ -489,7 +485,7 @@ export function WalrusUpload() {
                         variant="outline"
                         onClick={() => {
                           setReadBlobId(item.blobId);
-                          setReadMimeType(item.type);
+                          setReadMimeType(item.mimeType);
                         }}
                         className="text-black border-gray-300"
                       >
