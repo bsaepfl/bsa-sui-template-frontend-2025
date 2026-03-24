@@ -6,13 +6,16 @@ export default function Home() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-slate-900 mb-4">
-            Sui dApp Starter
+            Hackathon Starter
           </h1>
           <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-            Counter smart contract + Walrus decentralized storage. A hackathon starter built with Next.js, Sui SDK, and dApp Kit.
+            A stable base template for Sui hackathons. This template provides
+            essential components and integrations to help you build quickly. All
+            documentation and resources are available in the{" "}
+            <strong>Resources</strong> tab.
           </p>
         </div>
-        
+
         <div className="flex justify-center">
           <App />
         </div>

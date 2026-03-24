@@ -14,7 +14,7 @@ export default function RootLayout({
         <meta charSet="UTF-8" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Sui dApp Starter</title>
+        <title>Hackathon Starter</title>
       </head>
       <body>
         <Providers>
