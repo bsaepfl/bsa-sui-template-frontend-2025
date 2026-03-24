@@ -194,6 +194,16 @@ export class WalrusDirectService {
     });
   }
 
+  /**
+   * Alias for `writeFilesFlow` — matches WalrusService (extension) API.
+   */
+  uploadWithFlow(
+    files: readonly WriteFilesFlowFileInput[],
+    _options?: { readonly epochs?: number; readonly deletable?: boolean },
+  ): WriteFilesFlow {
+    return this.writeFilesFlow(files);
+  }
+
   // -------------------------------------------------------------------------
   // Read
   // -------------------------------------------------------------------------

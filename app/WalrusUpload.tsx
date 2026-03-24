@@ -15,7 +15,7 @@ import {
   useSignAndExecuteTransaction,
   useSuiClient,
 } from "@mysten/dapp-kit";
-import { createWalrusService } from "./services";
+import { createWalrusService, createWalrusDirectService } from "./services";
 import ClipLoader from "react-spinners/ClipLoader";
 import type { WriteFilesFlow } from "@mysten/walrus";
 import { WalrusRead } from "./WalrusRead";
@@ -39,14 +39,18 @@ export function WalrusUpload() {
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const suiClient = useSuiClient();
 
-  // Create walrus service directly (only on client-side)
+  // Walrus mode: SDK extension vs Direct client
+  const [walrusMode, setWalrusMode] = useState<"extension" | "direct">("extension");
+
+  // Create walrus service (only on client-side)
+  // Both services expose uploadWithFlow/writeFilesFlow with compatible signatures
   const walrus = useMemo(() => {
-    if (typeof window === "undefined") {
-      // Return a dummy service on server-side
-      return null as any;
+    if (typeof window === "undefined") return null;
+    if (walrusMode === "direct") {
+      return createWalrusDirectService({ network: "testnet", epochs: 10 });
     }
     return createWalrusService({ network: "testnet", epochs: 10 });
-  }, []);
+  }, [walrusMode]);
 
   // WAL token balance
   const { formattedBalance: walBalance, isLoading: walLoading } = useWalBalance("testnet");
@@ -546,10 +550,24 @@ export function WalrusUpload() {
               network. Files are stored for 10 epochs (~30 days on testnet).
             </CardDescription>
             {currentAccount && (
-              <div className="mt-2 text-sm text-gray-600">
-                WAL Balance:{" "}
-                <span className="font-mono font-semibold text-gray-900">
-                  {walLoading ? "..." : `${walBalance} WAL`}
+              <div className="mt-2 flex items-center gap-4 text-sm text-gray-600">
+                <span>
+                  WAL Balance:{" "}
+                  <span className="font-mono font-semibold text-gray-900">
+                    {walLoading ? "..." : `${walBalance} WAL`}
+                  </span>
+                </span>
+                <span className="text-gray-300">|</span>
+                <span className="flex items-center gap-2">
+                  Mode:
+                  <select
+                    value={walrusMode}
+                    onChange={(e) => setWalrusMode(e.target.value as "extension" | "direct")}
+                    className="px-2 py-1 border border-gray-300 rounded text-xs text-gray-900 bg-white"
+                  >
+                    <option value="extension">SDK Extension</option>
+                    <option value="direct">Direct Client</option>
+                  </select>
                 </span>
               </div>
             )}
