@@ -1,23 +1,20 @@
 ## Night Shift State
 
 ### Current Phase
-Phase 3 — Planning complete, starting execution
+Phase 5 — Finalization complete
 
 ### Tasks Status
-- [ ] Task 1: Create walrusServiceDirect.ts
-- [ ] Task 2: Update services/index.ts exports
-- [ ] Task 3: Add download/read section to WalrusUpload
-- [ ] Task 4: Fix binary file MIME type handling
-- [ ] Task 5: Add mode toggle UI in WalrusUpload
-- [ ] Task 6: Add WAL balance display
-- [ ] Task 7: Remove console.logs from all services
-- [ ] Task 8: Final build + visual verification
+- [x] Task 1: Create walrusServiceDirect.ts
+- [x] Task 2: Update services/index.ts exports
+- [x] Task 3: Add download/read section to WalrusUpload
+- [x] Task 4: Fix binary file MIME type handling
+- [x] Task 5: Add mode toggle UI in WalrusUpload
+- [x] Task 6: Add WAL balance display
+- [x] Task 7: Remove console.logs from all services
+- [x] Task 8: Final build + visual verification
 
 ### Last Checkpoint
-N/A — execution starting
+d31da60 — night-shift: add walrus mode toggle
 
 ### Last Validation
-Build: PASS (pre-night-shift) | Tests: N/A | Lint: N/A
-
-### Decisions Log
-See NIGHT_SHIFT_LOG.md
+Build: PASS | Tests: N/A | Lint: N/A | Visual: PASS

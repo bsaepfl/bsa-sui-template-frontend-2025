@@ -1,50 +1,46 @@
 # Night Shift Log — 2026-03-24
 
-## Night Shift Plan
+## Night Shift Summary
 
-### Objective
-Fix and improve Walrus storage integration: add direct WalrusClient mode, fix binary file handling, prepare WAL payment, add download functionality.
+### Completed
+- [x] Fix @mysten/sui v2 compatibility (SuiClient → SuiJsonRpcClient, getFullnodeUrl → getJsonRpcFullnodeUrl)
+- [x] Install @mysten/seal@1.1.1 and @mysten/walrus@1.1.0
+- [x] Create walrusServiceDirect.ts (standalone WalrusClient)
+- [x] Create WalrusRead.tsx (download/preview component)
+- [x] Create mimeDetection.ts (magic byte MIME detection)
+- [x] Add useWalBalance hook (WAL token balance display)
+- [x] Add mode toggle (SDK Extension vs Direct Client) in WalrusUpload
+- [x] Integrate WalrusRead into WalrusUpload with "Read" button in history
+- [x] Remove console.log debug statements from services
+- [x] Add Walrus aggregator/publisher URL constants
 
-### Architecture
-- Service layer pattern maintained (app/services/)
-- Two walrus services: existing SDK extension + new direct WalrusClient
-- WalrusUpload.tsx refactored to support mode selection and download
-- WAL balance display and payment handling
+### Decisions made
+- Both walrus modes (extension + direct) produce same WalrusClient; exposed both for hackathon educational value
+- Upload relay not configured (can be added later as third option)
+- WAL balance hook created but WAL tokens not available yet (user provides tomorrow)
+- MIME detection via magic bytes (PNG, JPEG, GIF, WebP, PDF, ZIP, SVG, XML, JSON, text)
+- WalrusRead uses Walrus aggregator HTTP API for reads (no wallet needed)
+- Kept WalrusRead as separate component to manage file size
 
-### Parallelizable workstreams
+### Not completed / Needs review
+- WAL payment flow needs testing with actual WAL tokens
+- Upload relay mode could be added as third option
+- SealWhitelist.tsx still has console.log debug statements (spec says don't touch Seal)
+- No automated tests (no test framework configured in project)
 
-**Workstream A: Walrus Direct Service** (independent)
-- Create walrusServiceDirect.ts using WalrusClient constructor directly
-- Update services/index.ts exports
+### Issues encountered
+- Worktree agents branched from main instead of feature branch, had to cherry-pick files manually
+- Rate limits hit on subagent API calls, but code was already produced
+- WalrusFile.from() requires non-optional identifier in @mysten/walrus@1.1.0 (fixed with default)
+- WriteFilesFlow is type-only export in new walrus version (fixed with import type)
 
-**Workstream B: Binary Fix + Download** (independent)
-- Add download/read section to WalrusUpload.tsx
-- Ensure proper MIME type handling on download
-- Add content-type preservation in blob attributes
+### Final validation
+- Build: PASS
+- Tests: N/A (no test framework)
+- Lint: N/A (eslint config missing in project)
+- Visual: PASS (puppeteer screenshot verified)
 
-**Sequential: UI Integration** (depends on A + B)
-- Add mode toggle (SDK extension vs Direct client) in WalrusUpload.tsx
-- Add WAL balance display
-- Add error handling for insufficient WAL
-- Clean up console.logs
-
-### Steps (ordered by dependency)
-1. [service] Create walrusServiceDirect.ts — Workstream A
-2. [service] Update services/index.ts — Workstream A
-3. [component] Add download/read section to WalrusUpload — Workstream B
-4. [component] Fix binary file MIME type handling — Workstream B
-5. [component] Add mode toggle UI in WalrusUpload — Sequential
-6. [component] Add WAL balance display — Sequential
-7. [service] Remove console.logs from all services — Sequential
-8. [build] Final build + visual verification — Sequential
-
-### Pre-made decisions
-- **Direct vs Extension**: Both use WalrusClient under the hood. Direct = `new WalrusClient({...})`, Extension = `SuiJsonRpcClient.$extend(walrus())`. We expose both for educational value in the hackathon template.
-- **Upload Relay**: Not used initially. Direct node upload for both modes. Upload relay can be added later as a third option.
-- **WAL Payment**: Code prepared but WAL tokens not available yet. Clear error messages when balance is 0.
-- **Binary MIME handling**: Store content-type in Walrus blob attributes (`attributes` field) for proper download handling.
-
-### Estimate
-- Files to create: 1 (walrusServiceDirect.ts)
-- Files to modify: 4 (WalrusUpload.tsx, services/index.ts, sealService.ts, walrusServiceSDK.ts)
-- Approximate: ~500 new lines, ~200 modified lines
+### Stats
+- Files created: 4 (walrusServiceDirect.ts, WalrusRead.tsx, mimeDetection.ts, useWalBalance.ts)
+- Files modified: 8 (sealService, counterService, whitelistService, walrusServiceSDK, types, networkConfig, WalrusUpload, constants, services/index)
+- Commits: 4
