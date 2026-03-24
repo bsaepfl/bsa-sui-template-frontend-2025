@@ -21,3 +21,8 @@ export {
   type WhitelistData,
   type CapData,
 } from "./whitelistService";
+export {
+  WalrusDirectService,
+  createWalrusDirectService,
+  type WalrusDirectConfig,
+} from "./walrusServiceDirect";

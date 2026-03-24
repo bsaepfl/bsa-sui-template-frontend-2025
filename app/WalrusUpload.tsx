@@ -18,6 +18,8 @@ import {
 import { createWalrusService } from "./services";
 import ClipLoader from "react-spinners/ClipLoader";
 import type { WriteFilesFlow } from "@mysten/walrus";
+import { WalrusRead } from "./WalrusRead";
+import { useWalBalance } from "./hooks/useWalBalance";
 
 type UploadTab = "file" | "text" | "json";
 
@@ -45,6 +47,13 @@ export function WalrusUpload() {
     }
     return createWalrusService({ network: "testnet", epochs: 10 });
   }, []);
+
+  // WAL token balance
+  const { formattedBalance: walBalance, isLoading: walLoading } = useWalBalance("testnet");
+
+  // State for download from history
+  const [readBlobId, setReadBlobId] = useState<string | undefined>(undefined);
+  const [readMimeType, setReadMimeType] = useState<string | undefined>(undefined);
 
   const [activeTab, setActiveTab] = useState<UploadTab>("file");
   const [uploading, setUploading] = useState(false);
@@ -536,6 +545,14 @@ export function WalrusUpload() {
               Upload files, text, or JSON to Walrus decentralized storage
               network. Files are stored for 10 epochs (~30 days on testnet).
             </CardDescription>
+            {currentAccount && (
+              <div className="mt-2 text-sm text-gray-600">
+                WAL Balance:{" "}
+                <span className="font-mono font-semibold text-gray-900">
+                  {walLoading ? "..." : `${walBalance} WAL`}
+                </span>
+              </div>
+            )}
           </CardHeader>
         </Card>
 
@@ -796,6 +813,17 @@ export function WalrusUpload() {
                       >
                         📋 Copy URL
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setReadBlobId(item.blobId);
+                          setReadMimeType(item.type);
+                        }}
+                        className="text-black border-gray-300"
+                      >
+                        📥 Read
+                      </Button>
                     </div>
                   </div>
                 ))}
@@ -803,6 +831,9 @@ export function WalrusUpload() {
             </CardContent>
           </Card>
         )}
+
+        {/* Read / Download Section */}
+        <WalrusRead initialBlobId={readBlobId} knownMimeType={readMimeType} />
 
         {/* Info Card */}
         <Card className="bg-blue-50">

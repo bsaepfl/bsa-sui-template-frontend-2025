@@ -5,3 +5,6 @@ export const MAINNET_COUNTER_PACKAGE_ID = "0xTODO";
 export const DEVNET_WHITELIST_PACKAGE_ID = "0xTODO";
 export const TESTNET_WHITELIST_PACKAGE_ID = "0x0fb53a1ee7068ed47c21fe299c727a99c014a60fdcbefd9ca4bb2a76b66d7467";
 export const MAINNET_WHITELIST_PACKAGE_ID = "0xTODO";
+
+export const WALRUS_TESTNET_AGGREGATOR = "https://aggregator.walrus-testnet.walrus.space";
+export const WALRUS_TESTNET_PUBLISHER = "https://publisher.walrus-testnet.walrus.space";
