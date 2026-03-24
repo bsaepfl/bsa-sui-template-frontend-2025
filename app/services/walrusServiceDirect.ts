@@ -17,6 +17,7 @@ import {
   WalrusClient,
   WalrusFile,
   type WriteBlobStep,
+  type WriteBlobFlow,
   type WriteFilesFlow,
 } from "@mysten/walrus";
 
@@ -190,6 +191,21 @@ export class WalrusDirectService {
 
     return this.client.writeFilesFlow({
       files: walrusFiles,
+      resume: options?.resume,
+    });
+  }
+
+  /**
+   * Browser-friendly step-by-step write flow for a single raw blob.
+   * Unlike writeFilesFlow, this stores a raw blob (no quilt wrapper),
+   * so the aggregator returns the exact bytes on read.
+   */
+  writeBlobFlow(
+    blob: Uint8Array,
+    options?: { readonly resume?: WriteBlobStep },
+  ): WriteBlobFlow {
+    return this.client.writeBlobFlow({
+      blob,
       resume: options?.resume,
     });
   }

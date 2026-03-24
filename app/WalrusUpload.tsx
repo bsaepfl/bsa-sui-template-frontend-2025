@@ -86,7 +86,7 @@ export function WalrusUpload() {
       result.alreadyCertified?.blobId;
     const objectId =
       result.newlyCreated?.blobObject?.id ??
-      result.alreadyCertified?.endEpoch ??
+      result.alreadyCertified?.blobId ??
       blobId;
 
     if (!blobId) {
@@ -109,8 +109,8 @@ export function WalrusUpload() {
 
   /**
    * Upload raw bytes via Walrus SDK (user pays WAL).
-   * Uses writeBlobFlow for step-by-step browser-friendly upload.
-   * Blob is owned by the user on-chain.
+   * Uses writeBlobFlow (raw blob, NOT quilt) so aggregator returns exact bytes.
+   * Blob object is owned by the user on-chain.
    */
   const uploadWithSDK = async (
     data: Uint8Array,
@@ -120,26 +120,36 @@ export function WalrusUpload() {
     if (!walrusDirect) throw new Error("Walrus service not available");
     if (!currentAccount) throw new Error("Connect your wallet first");
 
-    const flow = walrusDirect.writeFilesFlow(
-      [{ contents: data, identifier: filename ?? "file" }],
-    );
+    // writeBlobFlow stores a raw blob (no quilt wrapper)
+    const flow = walrusDirect.writeBlobFlow(data);
 
+    // Step 1: Encode
     await flow.encode();
 
+    // Step 2: Register (user signs tx, pays WAL)
     const registerTx = flow.register({
       owner: currentAccount.address,
       epochs: 10,
       deletable: true,
     });
 
-    let registerDigest: string = "";
+    let registerDigest = "";
+    let blobObjectId = "";
     await new Promise<void>((resolve, reject) => {
       signAndExecute(
         { transaction: registerTx },
         {
           onSuccess: async ({ digest }) => {
             registerDigest = digest;
-            await suiClient.waitForTransaction({ digest });
+            const result = await suiClient.waitForTransaction({
+              digest,
+              options: { showEffects: true, showEvents: true },
+            });
+            // Extract Sui object ID from created objects
+            const created = result.effects?.created?.[0];
+            if (created?.reference?.objectId) {
+              blobObjectId = created.reference.objectId;
+            }
             resolve();
           },
           onError: reject,
@@ -147,8 +157,10 @@ export function WalrusUpload() {
       );
     });
 
+    // Step 3: Upload data to storage nodes
     await flow.upload({ digest: registerDigest });
 
+    // Step 4: Certify (user signs tx)
     const certifyTx = flow.certify();
     await new Promise<void>((resolve, reject) => {
       signAndExecute(
@@ -163,13 +175,14 @@ export function WalrusUpload() {
       );
     });
 
-    const files = await flow.listFiles();
-    const blobId = files[0]?.blobId;
-    if (!blobId) throw new Error("Failed to get blobId after upload");
+    // Step 5: Get certified blob info
+    const certifiedBlob = await flow.getBlob();
+    const blobId = certifiedBlob.blobId;
+    const suiObjectId = blobObjectId || certifiedBlob.blobObjectId || blobId;
 
     const storedBlob: StoredBlob = {
       blobId,
-      objectId: files[0]?.id ?? blobId,
+      objectId: suiObjectId,
       url: `https://aggregator.walrus-testnet.walrus.space/v1/blobs/${blobId}`,
       size: data.length,
       mimeType,
