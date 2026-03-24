@@ -9,16 +9,32 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useCurrentAccount } from "@mysten/dapp-kit";
+import {
+  useCurrentAccount,
+  useSignAndExecuteTransaction,
+  useSuiClient,
+} from "@mysten/dapp-kit";
 import ClipLoader from "react-spinners/ClipLoader";
 import { WalrusRead } from "./WalrusRead";
 import { useWalBalance } from "./hooks/useWalBalance";
 import { useOwnedBlobs, type StoredBlob } from "./hooks/useOwnedBlobs";
+import { useMemo } from "react";
+import { createWalrusDirectService } from "./services";
 
 type UploadTab = "file" | "text" | "json";
+type UploadMode = "publisher" | "sdk";
 
 export function WalrusUpload() {
   const currentAccount = useCurrentAccount();
+  const { mutateAsync: signAndExecuteAsync } = useSignAndExecuteTransaction();
+  const suiClient = useSuiClient();
+
+  const [uploadMode, setUploadMode] = useState<UploadMode>("publisher");
+
+  const walrusDirect = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    return createWalrusDirectService({ network: "testnet", epochs: 10 });
+  }, []);
 
   // WAL token balance
   const { formattedBalance: walBalance, isLoading: walLoading } = useWalBalance("testnet");
@@ -90,6 +106,76 @@ export function WalrusUpload() {
   };
 
   /**
+   * Upload via Walrus SDK (user pays WAL). Uses writeBlobFlow.
+   * Two signatures are required by the Walrus protocol (register + certify),
+   * but they auto-chain using mutateAsync (no manual "continue" step).
+   */
+  const uploadWithSDK = async (
+    data: Uint8Array,
+    mimeType: string,
+    filename?: string,
+  ): Promise<StoredBlob> => {
+    if (!walrusDirect || !currentAccount) {
+      throw new Error("Connect your wallet first");
+    }
+
+    const flow = walrusDirect.writeBlobFlow(data);
+
+    // Step 1: Encode blob into slivers
+    setSuccess("Encoding blob...");
+    await flow.encode();
+
+    // Step 2: Register on-chain (signature 1/2)
+    setSuccess("Sign to register blob (1/2)...");
+    const registerTx = flow.register({
+      owner: currentAccount.address,
+      epochs: 10,
+      deletable: true,
+    });
+
+    const { digest: registerDigest } = await signAndExecuteAsync({
+      transaction: registerTx,
+    });
+    const registerResult = await suiClient.waitForTransaction({
+      digest: registerDigest,
+      options: { showEffects: true },
+    });
+    const blobObjectId =
+      registerResult.effects?.created?.[0]?.reference?.objectId ?? "";
+
+    // Step 3: Upload slivers to storage nodes (no signature)
+    setSuccess("Uploading to storage nodes...");
+    await flow.upload({ digest: registerDigest });
+
+    // Step 4: Certify on-chain (signature 2/2, auto-fires immediately)
+    setSuccess("Sign to certify blob (2/2)...");
+    const certifyTx = flow.certify();
+    await signAndExecuteAsync({ transaction: certifyTx });
+
+    // Step 5: Done
+    const certifiedBlob = await flow.getBlob();
+
+    const storedBlob: StoredBlob = {
+      blobId: certifiedBlob.blobId,
+      objectId: blobObjectId || certifiedBlob.blobObjectId,
+      url: `https://aggregator.walrus-testnet.walrus.space/v1/blobs/${certifiedBlob.blobId}`,
+      size: data.length,
+      mimeType,
+      timestamp: Date.now(),
+      filename,
+      source: "sdk",
+    };
+    addBlob(storedBlob);
+    return storedBlob;
+  };
+
+  /** Dispatch upload to publisher or SDK based on mode. */
+  const uploadData = (data: Uint8Array, mimeType: string, filename?: string) =>
+    uploadMode === "sdk"
+      ? uploadWithSDK(data, mimeType, filename)
+      : uploadToPublisher(data, mimeType, filename);
+
+  /**
    * Handle file upload via publisher HTTP API (raw blob, no quilt).
    */
   const handleFileUpload = async (
@@ -106,7 +192,7 @@ export function WalrusUpload() {
       const contents = new Uint8Array(await file.arrayBuffer());
       const mimeType = file.type || "application/octet-stream";
 
-      await uploadToPublisher(contents, mimeType, file.name);
+      await uploadData(contents, mimeType, file.name);
       setSuccess(`File "${file.name}" uploaded successfully!`);
       event.target.value = "";
     } catch (err) {
@@ -131,7 +217,7 @@ export function WalrusUpload() {
 
     try {
       const data = new TextEncoder().encode(textContent);
-      await uploadToPublisher(data, "text/plain", "text.txt");
+      await uploadData(data, "text/plain", "text.txt");
       setSuccess("Text uploaded successfully!");
       setTextContent("");
     } catch (err) {
@@ -163,7 +249,7 @@ export function WalrusUpload() {
 
     try {
       const data = new TextEncoder().encode(jsonContent);
-      await uploadToPublisher(data, "application/json", "data.json");
+      await uploadData(data, "application/json", "data.json");
       setSuccess("JSON uploaded successfully!");
       setJsonContent("");
     } catch (err) {
@@ -207,14 +293,26 @@ export function WalrusUpload() {
               network. Files are stored for 10 epochs (~30 days on testnet).
             </CardDescription>
             {currentAccount && (
-              <div className="mt-2 text-sm text-gray-600">
-                WAL:{" "}
-                <span className="font-mono font-semibold text-gray-900">
-                  {walLoading ? "..." : walBalance}
+              <div className="mt-3 flex flex-wrap items-center gap-4 text-sm">
+                <span className="text-gray-600">
+                  WAL:{" "}
+                  <span className="font-mono font-semibold text-gray-900">
+                    {walLoading ? "..." : walBalance}
+                  </span>
                 </span>
-                <span className="ml-2 text-xs text-gray-400">
-                  (uploads via public testnet publisher, no signature needed)
-                </span>
+                <select
+                  value={uploadMode}
+                  onChange={(e) => setUploadMode(e.target.value as UploadMode)}
+                  className="px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+                >
+                  <option value="publisher">Free (Publisher)</option>
+                  <option value="sdk">Pay with WAL (SDK)</option>
+                </select>
+                {uploadMode === "sdk" && (
+                  <span className="text-xs text-amber-600">
+                    2 signatures required (register + certify)
+                  </span>
+                )}
               </div>
             )}
           </CardHeader>
