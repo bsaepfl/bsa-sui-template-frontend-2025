@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { ConnectButton } from "@mysten/dapp-kit";
+import { ZkLoginButtons } from "./ZkLoginButtons";
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -127,8 +128,11 @@ export default function Navbar() {
             </NavigationMenuLink>
           </NavigationMenuItem>
           <NavigationMenuItem>
-          <ConnectButton />
-        </NavigationMenuItem>
+            <ZkLoginButtons />
+          </NavigationMenuItem>
+          <NavigationMenuItem>
+            <ConnectButton />
+          </NavigationMenuItem>
         </div>
       </NavigationMenuList>
     </NavigationMenu>

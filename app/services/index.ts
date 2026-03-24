@@ -26,3 +26,7 @@ export {
   createWalrusDirectService,
   type WalrusDirectConfig,
 } from "./walrusServiceDirect";
+export {
+  SponsoredTxService,
+  createSponsoredTxService,
+} from "./sponsoredTxService";
