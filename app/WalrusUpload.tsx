@@ -9,15 +9,8 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useMemo } from "react";
-import {
-  useCurrentAccount,
-  useSignAndExecuteTransaction,
-  useSuiClient,
-} from "@mysten/dapp-kit";
-import { createWalrusService, createWalrusDirectService } from "./services";
+import { useCurrentAccount } from "@mysten/dapp-kit";
 import ClipLoader from "react-spinners/ClipLoader";
-import type { WriteFilesFlow } from "@mysten/walrus";
 import { WalrusRead } from "./WalrusRead";
 import { useWalBalance } from "./hooks/useWalBalance";
 
@@ -34,23 +27,7 @@ interface UploadedItem {
 }
 
 export function WalrusUpload() {
-  // Get wallet hooks for signing
   const currentAccount = useCurrentAccount();
-  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
-  const suiClient = useSuiClient();
-
-  // Walrus mode: SDK extension vs Direct client
-  const [walrusMode, setWalrusMode] = useState<"extension" | "direct">("extension");
-
-  // Create walrus service (only on client-side)
-  // Both services expose uploadWithFlow/writeFilesFlow with compatible signatures
-  const walrus = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    if (walrusMode === "direct") {
-      return createWalrusDirectService({ network: "testnet", epochs: 10 });
-    }
-    return createWalrusService({ network: "testnet", epochs: 10 });
-  }, [walrusMode]);
 
   // WAL token balance
   const { formattedBalance: walBalance, isLoading: walLoading } = useWalBalance("testnet");
@@ -70,8 +47,54 @@ export function WalrusUpload() {
   const [jsonContent, setJsonContent] = useState("");
 
   /**
-   * Handle file upload using WalrusFile API with writeFilesFlow
-   * From official docs: https://sdk.mystenlabs.com/walrus
+   * Upload raw bytes to Walrus via the publisher HTTP API.
+   * Stores a raw blob (NOT a quilt), so aggregator returns exact bytes.
+   * The public testnet publisher handles storage fees — no WAL needed.
+   */
+  const uploadToPublisher = async (
+    data: Uint8Array,
+    mimeType: string,
+    filename?: string,
+  ): Promise<UploadedItem> => {
+    const publisherUrl = "https://publisher.walrus-testnet.walrus.space";
+    const response = await fetch(`${publisherUrl}/v1/blobs?epochs=10`, {
+      method: "PUT",
+      body: new Blob([data.buffer as ArrayBuffer]),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Publisher error ${response.status}: ${text}`);
+    }
+
+    const result = await response.json();
+    // Response can be { newlyCreated: { blobObject: { blobId, id } } }
+    // or { alreadyCertified: { blobId, ... } }
+    const blobId =
+      result.newlyCreated?.blobObject?.blobId ??
+      result.alreadyCertified?.blobId;
+    const objectId =
+      result.newlyCreated?.blobObject?.id ??
+      result.alreadyCertified?.endEpoch ??
+      blobId;
+
+    if (!blobId) {
+      throw new Error("No blobId in publisher response");
+    }
+
+    return {
+      blobId,
+      id: objectId,
+      url: `https://aggregator.walrus-testnet.walrus.space/v1/blobs/${blobId}`,
+      size: data.length,
+      type: mimeType,
+      timestamp: Date.now(),
+      filename,
+    };
+  };
+
+  /**
+   * Handle file upload via publisher HTTP API (raw blob, no quilt).
    */
   const handleFileUpload = async (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -79,144 +102,20 @@ export function WalrusUpload() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!currentAccount) {
-      setError("Please connect your wallet first");
-      return;
-    }
-
-    if (!walrus) {
-      setError("Walrus service not available. Please refresh the page.");
-      return;
-    }
-
     setUploading(true);
     setError(null);
     setSuccess(null);
 
     try {
-      // Read file as array buffer
-      const contents = await file.arrayBuffer();
+      const contents = new Uint8Array(await file.arrayBuffer());
+      const mimeType = file.type || "application/octet-stream";
 
-      // Use writeFilesFlow for browser environments (avoids popup blocking)
-      const flow: WriteFilesFlow = walrus.uploadWithFlow(
-        [
-          {
-            contents: new Uint8Array(contents),
-            identifier: file.name,
-            tags: { "content-type": file.type || "application/octet-stream" },
-          },
-        ],
-        { epochs: 10, deletable: true },
-      );
-
-      // Step 1: Encode files
-      await flow.encode();
-
-      // Step 2: Register the blob (returns transaction)
-      const registerTx = flow.register({
-        owner: currentAccount.address,
-        epochs: 10,
-        deletable: true,
-      });
-
-      // Step 3: Sign and execute register transaction and get the created blob object ID
-      let registerDigest: string;
-      let blobObjectId: string | null = null;
-      await new Promise<void>((resolve, reject) => {
-        signAndExecute(
-          { transaction: registerTx },
-          {
-            onSuccess: async ({ digest }) => {
-              try {
-                registerDigest = digest;
-                const result = await suiClient.waitForTransaction({
-                  digest,
-                  options: {
-                    showEffects: true,
-                    showEvents: true,
-                  },
-                });
-
-                // Get the blob object ID from BlobRegistered event
-                if (result.events) {
-                  const blobRegisteredEvent = result.events.find((event) =>
-                    event.type.includes("BlobRegistered"),
-                  );
-
-                  if (blobRegisteredEvent?.parsedJson) {
-                    // Extract object_id from the event (can be snake_case or camelCase)
-                    const eventData = blobRegisteredEvent.parsedJson as {
-                      object_id?: string;
-                      objectId?: string;
-                    };
-                    blobObjectId =
-                      eventData.object_id || eventData.objectId || null;
-                  }
-                }
-                resolve();
-              } catch (err) {
-                reject(err);
-              }
-            },
-            onError: reject,
-          },
-        );
-      });
-
-      // Step 4: Upload the blob data to storage nodes
-      await flow.upload({ digest: registerDigest! });
-
-      // Step 5: Certify the blob (returns transaction)
-      const certifyTx = flow.certify();
-
-      // Step 6: Sign and execute certify transaction
-      await new Promise<void>((resolve, reject) => {
-        signAndExecute(
-          { transaction: certifyTx },
-          {
-            onSuccess: async ({ digest }) => {
-              try {
-                await suiClient.waitForTransaction({ digest });
-                resolve();
-              } catch (err) {
-                reject(err);
-              }
-            },
-            onError: reject,
-          },
-        );
-      });
-
-      // Step 7: Get the blobId from listFiles
-      const files = await flow.listFiles();
-      const blobId = files[0]?.blobId;
-
-      if (!blobId) {
-        throw new Error("Failed to get blobId after upload");
-      }
-
-      // Use the blob object ID from transaction effects, or fallback to blobId if not found
-      const metadataId = blobObjectId || blobId;
-
-      const uploadedItem: UploadedItem = {
-        blobId,
-        id: metadataId,
-        url: `https://aggregator.walrus-testnet.walrus.space/v1/${blobId}`,
-        size: file.size,
-        type: file.type || "application/octet-stream",
-        timestamp: Date.now(),
-        filename: file.name,
-      };
+      const uploadedItem = await uploadToPublisher(contents, mimeType, file.name);
       setUploadHistory([uploadedItem, ...uploadHistory]);
       setSuccess(`File "${file.name}" uploaded successfully!`);
-
-      // Reset input
       event.target.value = "";
     } catch (err) {
-      setError(
-        `Upload failed: ${err instanceof Error ? err.message : "Unknown error"}`,
-      );
-      console.error("Upload error:", err);
+      setError(`Upload failed: ${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {
       setUploading(false);
     }
@@ -231,135 +130,18 @@ export function WalrusUpload() {
       return;
     }
 
-    if (!currentAccount) {
-      setError("Please connect your wallet first");
-      return;
-    }
-
-    if (!walrus) {
-      setError("Walrus service not available. Please refresh the page.");
-      return;
-    }
-
     setUploading(true);
     setError(null);
     setSuccess(null);
 
     try {
-      // Use writeFilesFlow for browser environments
-      const flow = walrus.uploadWithFlow(
-        [
-          {
-            contents: textContent,
-            identifier: "text.txt",
-            tags: { "content-type": "text/plain" },
-          },
-        ],
-        { epochs: 10, deletable: true },
-      );
-
-      // Step 1: Encode
-      await flow.encode();
-
-      // Step 2: Register
-      const registerTx = flow.register({
-        owner: currentAccount.address,
-        epochs: 10,
-        deletable: true,
-      });
-
-      let registerDigest: string;
-      let blobObjectId: string | null = null;
-      await new Promise<void>((resolve, reject) => {
-        signAndExecute(
-          { transaction: registerTx },
-          {
-            onSuccess: async ({ digest }) => {
-              try {
-                registerDigest = digest;
-                const result = await suiClient.waitForTransaction({
-                  digest,
-                  options: {
-                    showEffects: true,
-                    showEvents: true,
-                  },
-                });
-
-                // Get the blob object ID from BlobRegistered event
-                if (result.events) {
-                  const blobRegisteredEvent = result.events.find((event) =>
-                    event.type.includes("BlobRegistered"),
-                  );
-
-                  if (blobRegisteredEvent?.parsedJson) {
-                    // Extract object_id from the event (can be snake_case or camelCase)
-                    const eventData = blobRegisteredEvent.parsedJson as {
-                      object_id?: string;
-                      objectId?: string;
-                    };
-                    blobObjectId =
-                      eventData.object_id || eventData.objectId || null;
-                  }
-                }
-                resolve();
-              } catch (err) {
-                reject(err);
-              }
-            },
-            onError: reject,
-          },
-        );
-      });
-
-      // Step 3: Upload
-      await flow.upload({ digest: registerDigest! });
-
-      // Step 4: Certify
-      const certifyTx = flow.certify();
-      await new Promise<void>((resolve, reject) => {
-        signAndExecute(
-          { transaction: certifyTx },
-          {
-            onSuccess: async ({ digest }) => {
-              try {
-                await suiClient.waitForTransaction({ digest });
-                resolve();
-              } catch (err) {
-                reject(err);
-              }
-            },
-            onError: reject,
-          },
-        );
-      });
-
-      // Step 5: Get blobId
-      const files = await flow.listFiles();
-      const blobId = files[0]?.blobId;
-
-      if (!blobId) {
-        throw new Error("Failed to get blobId after upload");
-      }
-
-      // Use the blob object ID from transaction effects, or fallback to blobId if not found
-      const metadataId = blobObjectId || blobId;
-
-      const uploadedItem: UploadedItem = {
-        blobId,
-        id: metadataId,
-        url: `https://aggregator.walrus-testnet.walrus.space/v1/${blobId}`,
-        size: textContent.length,
-        type: "text/plain",
-        timestamp: Date.now(),
-      };
+      const data = new TextEncoder().encode(textContent);
+      const uploadedItem = await uploadToPublisher(data, "text/plain", "text.txt");
       setUploadHistory([uploadedItem, ...uploadHistory]);
       setSuccess("Text uploaded successfully!");
       setTextContent("");
     } catch (err) {
-      setError(
-        `Upload failed: ${err instanceof Error ? err.message : "Unknown error"}`,
-      );
-      console.error("Upload error:", err);
+      setError(`Upload failed: ${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {
       setUploading(false);
     }
@@ -374,21 +156,10 @@ export function WalrusUpload() {
       return;
     }
 
-    // Validate JSON
     try {
       JSON.parse(jsonContent);
     } catch {
       setError("Invalid JSON format. Please check your syntax.");
-      return;
-    }
-
-    if (!currentAccount) {
-      setError("Please connect your wallet first");
-      return;
-    }
-
-    if (!walrus) {
-      setError("Walrus service not available. Please refresh the page.");
       return;
     }
 
@@ -397,120 +168,13 @@ export function WalrusUpload() {
     setSuccess(null);
 
     try {
-      // Use writeFilesFlow for browser environments
-      const flow = walrus.uploadWithFlow(
-        [
-          {
-            contents: jsonContent,
-            identifier: "data.json",
-            tags: { "content-type": "application/json" },
-          },
-        ],
-        { epochs: 10, deletable: true },
-      );
-
-      // Step 1: Encode
-      await flow.encode();
-
-      // Step 2: Register
-      const registerTx = flow.register({
-        owner: currentAccount.address,
-        epochs: 10,
-        deletable: true,
-      });
-
-      let registerDigest: string;
-      let blobObjectId: string | null = null;
-      await new Promise<void>((resolve, reject) => {
-        signAndExecute(
-          { transaction: registerTx },
-          {
-            onSuccess: async ({ digest }) => {
-              try {
-                registerDigest = digest;
-                const result = await suiClient.waitForTransaction({
-                  digest,
-                  options: {
-                    showEffects: true,
-                    showEvents: true,
-                  },
-                });
-
-                // Get the blob object ID from BlobRegistered event
-                if (result.events) {
-                  const blobRegisteredEvent = result.events.find((event) =>
-                    event.type.includes("BlobRegistered"),
-                  );
-
-                  if (blobRegisteredEvent?.parsedJson) {
-                    // Extract object_id from the event (can be snake_case or camelCase)
-                    const eventData = blobRegisteredEvent.parsedJson as {
-                      object_id?: string;
-                      objectId?: string;
-                    };
-                    blobObjectId =
-                      eventData.object_id || eventData.objectId || null;
-                  }
-                }
-                resolve();
-              } catch (err) {
-                reject(err);
-              }
-            },
-            onError: reject,
-          },
-        );
-      });
-
-      // Step 3: Upload
-      await flow.upload({ digest: registerDigest! });
-
-      // Step 4: Certify
-      const certifyTx = flow.certify();
-      await new Promise<void>((resolve, reject) => {
-        signAndExecute(
-          { transaction: certifyTx },
-          {
-            onSuccess: async ({ digest }) => {
-              try {
-                await suiClient.waitForTransaction({ digest });
-                resolve();
-              } catch (err) {
-                reject(err);
-              }
-            },
-            onError: reject,
-          },
-        );
-      });
-
-      // Step 5: Get blobId
-      const files = await flow.listFiles();
-      const blobId = files[0]?.blobId;
-
-      if (!blobId) {
-        throw new Error("Failed to get blobId after upload");
-      }
-
-      // Use the blob object ID from transaction effects, or fallback to blobId if not found
-      const metadataId = blobObjectId || blobId;
-
-      const uploadedItem: UploadedItem = {
-        blobId,
-        id: metadataId,
-        url: `https://aggregator.walrus-testnet.walrus.space/v1/${blobId}`,
-        size: jsonContent.length,
-        type: "application/json",
-        timestamp: Date.now(),
-      };
+      const data = new TextEncoder().encode(jsonContent);
+      const uploadedItem = await uploadToPublisher(data, "application/json", "data.json");
       setUploadHistory([uploadedItem, ...uploadHistory]);
       setSuccess("JSON uploaded successfully!");
       setJsonContent("");
     } catch (err) {
-      setError(
-        `Upload failed: ${err instanceof Error ? err.message : "Unknown error"}`,
-      );
-      console.error("Upload error:", err);
+      setError(`Upload failed: ${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {
       setUploading(false);
     }
@@ -550,24 +214,13 @@ export function WalrusUpload() {
               network. Files are stored for 10 epochs (~30 days on testnet).
             </CardDescription>
             {currentAccount && (
-              <div className="mt-2 flex items-center gap-4 text-sm text-gray-600">
-                <span>
-                  WAL Balance:{" "}
-                  <span className="font-mono font-semibold text-gray-900">
-                    {walLoading ? "..." : `${walBalance} WAL`}
-                  </span>
+              <div className="mt-2 text-sm text-gray-600">
+                WAL Balance:{" "}
+                <span className="font-mono font-semibold text-gray-900">
+                  {walLoading ? "..." : `${walBalance} WAL`}
                 </span>
-                <span className="text-gray-300">|</span>
-                <span className="flex items-center gap-2">
-                  Mode:
-                  <select
-                    value={walrusMode}
-                    onChange={(e) => setWalrusMode(e.target.value as "extension" | "direct")}
-                    className="px-2 py-1 border border-gray-300 rounded text-xs text-gray-900 bg-white"
-                  >
-                    <option value="extension">SDK Extension</option>
-                    <option value="direct">Direct Client</option>
-                  </select>
+                <span className="ml-2 text-xs text-gray-400">
+                  (uploads use public testnet publisher)
                 </span>
               </div>
             )}
