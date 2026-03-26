@@ -111,7 +111,7 @@ temp/
 # Turbo
 .turbo
 
-# Claude Code context
+# Dev context
 .claude/
 CLAUDE.md
 NIGHT_SHIFT_*.md
