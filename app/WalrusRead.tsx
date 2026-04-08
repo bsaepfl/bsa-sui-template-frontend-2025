@@ -161,7 +161,6 @@ export function WalrusRead({ initialBlobId, knownMimeType }: WalrusReadProps) {
             {/* Image preview */}
             {isPreviewableImage(result.mimeType) && result.objectUrl && (
               <div className="p-2 bg-gray-50 border border-gray-200 rounded-md">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={result.objectUrl}
                   alt={`Walrus blob ${blobId.slice(0, 8)}`}

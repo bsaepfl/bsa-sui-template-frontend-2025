@@ -1,4 +1,4 @@
-import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from "@mysten/sui/jsonRpc";
+import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { SealClient, SessionKey } from "@mysten/seal";
 import { Transaction } from "@mysten/sui/transactions";
 import { fromHex } from "@mysten/sui/utils";
@@ -27,6 +27,16 @@ export const SEAL_TESTNET_SERVERS = {
     "0x6a0726a1ea3d62ba2f2ae51104f2c3633c003fb75621d06fde47f04dc930ba06",
 } as const;
 
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const GRPC_BASE_URLS: Record<string, string> = {
+  devnet: "https://fullnode.devnet.sui.io:443",
+  testnet: "https://fullnode.testnet.sui.io:443",
+  mainnet: "https://fullnode.mainnet.sui.io:443",
+};
+
 export interface SealConfig {
   network?: "testnet" | "mainnet";
   serverObjectIds?: string[];
@@ -40,12 +50,12 @@ export interface SealConfig {
  */
 export class SealService {
   private client: SealClient;
-  private suiClient: SuiJsonRpcClient;
+  private suiClient: SuiGrpcClient;
   private whitelistPackageId: string;
 
   constructor(config?: SealConfig) {
     const network = config?.network || "testnet";
-    this.suiClient = new SuiJsonRpcClient({ url: getJsonRpcFullnodeUrl(network), network });
+    this.suiClient = new SuiGrpcClient({ network, baseUrl: GRPC_BASE_URLS[network] });
 
     // Default Seal key server object IDs for testnet
     // Use the first Mysten server by default, but allow custom selection
@@ -188,7 +198,7 @@ export class SealService {
   /**
    * Get the Sui client
    */
-  getSuiClient(): SuiJsonRpcClient {
+  getSuiClient(): SuiGrpcClient {
     return this.suiClient;
   }
 

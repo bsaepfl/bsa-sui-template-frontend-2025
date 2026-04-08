@@ -8,8 +8,17 @@
  * pnpm install @mysten/walrus @mysten/sui
  */
 
-import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from "@mysten/sui/jsonRpc";
+import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { walrus, WalrusFile } from "@mysten/walrus";
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const GRPC_BASE_URLS: Record<string, string> = {
+  testnet: "https://fullnode.testnet.sui.io:443",
+  mainnet: "https://fullnode.mainnet.sui.io:443",
+};
 
 export interface WalrusConfig {
   network?: "testnet" | "mainnet";
@@ -21,23 +30,22 @@ export interface WalrusConfig {
  * Walrus Service using Official SDK
  *
  * Follows the official pattern from https://sdk.mystenlabs.com/walrus
- * IMPORTANT: Must use SuiJsonRpcClient (not SuiClient) and include network property
+ * IMPORTANT: Must use SuiGrpcClient (or SuiJsonRpcClient) and include network property
  */
 export class WalrusService {
-  private client: any; // SuiJsonRpcClient extended with walrus()
+  private client: any; // SuiGrpcClient extended with walrus()
   private defaultEpochs: number;
   private defaultDeletable: boolean;
 
   constructor(config?: WalrusConfig) {
     const network = config?.network || "testnet";
 
-    // Create client with Walrus extension - MUST use SuiJsonRpcClient and include network
+    // Create client with Walrus extension - uses SuiGrpcClient with network
     // From official docs: https://sdk.mystenlabs.com/walrus
     // For Next.js, we need to load WASM from CDN to avoid bundling issues
-    this.client = new SuiJsonRpcClient({
-      url: getJsonRpcFullnodeUrl(network),
-      // Setting network on your client is required for walrus to work correctly
-      network: network,
+    this.client = new SuiGrpcClient({
+      network,
+      baseUrl: GRPC_BASE_URLS[network],
     }).$extend(
       walrus({
         wasmUrl:
@@ -297,7 +305,7 @@ export class WalrusService {
 /**
  * Factory function to create WalrusService
  *
- * IMPORTANT: Uses SuiJsonRpcClient (not SuiClient) as required by Walrus SDK
+ * IMPORTANT: Uses SuiGrpcClient (or SuiJsonRpcClient) as required by Walrus SDK
  * See: https://sdk.mystenlabs.com/walrus
  *
  * @example

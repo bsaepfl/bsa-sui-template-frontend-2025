@@ -2,7 +2,7 @@
  * Walrus Direct Service
  *
  * This service uses `new WalrusClient()` directly instead of the
- * `walrus()` extension pattern on SuiJsonRpcClient.
+ * `walrus()` extension pattern on SuiGrpcClient.
  *
  * Use this when you need full control over the WalrusClient instance,
  * e.g. custom upload relays or package config overrides.
@@ -11,7 +11,8 @@
  * pnpm install @mysten/walrus @mysten/sui
  */
 
-import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from "@mysten/sui/jsonRpc";
+import { SuiGrpcClient } from "@mysten/sui/grpc";
+import type { ClientWithCoreApi } from "@mysten/sui/client";
 import type { Signer } from "@mysten/sui/cryptography";
 import {
   WalrusClient,
@@ -27,7 +28,7 @@ import {
 
 export interface WalrusDirectConfig {
   readonly network?: "testnet" | "mainnet";
-  readonly suiClient?: SuiJsonRpcClient;
+  readonly suiClient?: ClientWithCoreApi;
   readonly epochs?: number;
   readonly deletable?: boolean;
 }
@@ -76,6 +77,11 @@ interface StorageCostResult {
 // Constants
 // ---------------------------------------------------------------------------
 
+const GRPC_BASE_URLS: Record<string, string> = {
+  testnet: "https://fullnode.testnet.sui.io:443",
+  mainnet: "https://fullnode.mainnet.sui.io:443",
+};
+
 const DEFAULT_EPOCHS = 5;
 const DEFAULT_DELETABLE = true;
 const WASM_CDN_URL =
@@ -88,7 +94,7 @@ const WASM_CDN_URL =
 /**
  * Walrus service backed by `WalrusClient` (direct instantiation).
  *
- * Unlike `WalrusService` (which extends `SuiJsonRpcClient` via the
+ * Unlike `WalrusService` (which extends `SuiGrpcClient` via the
  * `walrus()` plugin), this class creates a standalone `WalrusClient`
  * and exposes the same capabilities through a thin wrapper.
  */
@@ -102,9 +108,9 @@ export class WalrusDirectService {
 
     const suiClient =
       config?.suiClient ??
-      new SuiJsonRpcClient({
-        url: getJsonRpcFullnodeUrl(network),
+      new SuiGrpcClient({
         network,
+        baseUrl: GRPC_BASE_URLS[network],
       });
 
     this.client = new WalrusClient({
